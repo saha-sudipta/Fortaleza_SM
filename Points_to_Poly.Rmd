@@ -11,7 +11,7 @@ library(spdep)
 library(dplyr)
 library(lubridate)
 library(maptools)
-
+library(rgeos)
 ```
 
 Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.
@@ -76,29 +76,92 @@ Group ages
 homs_01_17$AgeGroup <- cut(homs_01_17$Age, breaks=c(0, 15, 25, 45, 65, Inf), labels=c("0-14","15-24","25-44","45-64","65+"))
 ```
 
-Read in and merge with shapefile at Bairro and CT level
+##Important Note
+There are two shapefiles. One of CTs obtained from IBGE, and the other for Fortaleza at the bairro level obtained from the MHS. The CTs had some mislabelling in terms of the bairros, which could have led to incorrect population denominators for an area. We are using the corrected file.
+
+Now, CTs and bairros are not completely ligned up with each other. So, sometimes a CT in one bairro will jut into another bairro (bairro being defined by the MHS shapefile). However, since we expect to do our analysis at two levels - CT and bairro, it is best to be consistent. So instead of using the MHS shapefile we will use the IBGE shapefile, and create bairros by unions of the nested CTs. But we will use the names used in the Bairro shapefile.
 
 ```{r}
-shp_bairro <- readOGR("Shapefiles/Bairro/", "City_shape_corrected")
 shp_CT <- readOGR("Shapefiles/CTs/", "Corrected_CTs")
-shp_CT@data <- left_join(shp_CT@data, shp_bairro@data[,-1], by=c("CD_GEOCODB"="cod_ibge"))
-```
+shp_bairro <- readOGR("Shapefiles/Bairro/", "City_shape_corrected")
 
-Project CT shapefile into the same projection as point and bairro data
-
-```{r}
+#Project CT shapefile into the same projection as point data
 def_CRS <- homs_01_17@proj4string
 shp_CT <- spTransform(shp_CT, def_CRS)
+
+#Add proper names from bairro shp and get rid of unnecessary columns. Rename to bairro
+shp_CT@data <- left_join(shp_CT@data, shp_bairro@data, by=c("CD_GEOCODB"="cod_ibge"))
+shp_CT@data <- shp_CT@data[,-14]
+colnames(shp_CT@data)[14] <- "Bairro"
+
+shp_CT@data[] <- lapply(shp_CT@data, as.character)
+
+#Dissolving CTs within bairros creates spatialpolygons. TO make spatialpolygonsdataframe, we keep the df from the bairro shapefile and add it afterwards.
+
+df <- shp_bairro@data
+rownames(df) <- df$cod_ibge
+shp_bairro <- gUnaryUnion(shp_CT, shp_CT@data$CD_GEOCODB)
+shp_bairro <- SpatialPolygonsDataFrame(shp_bairro, df)
+
+rm(df)
+
 ```
 
-Merge points and shapes
+Going to save the new bairro shapefile
 
 ```{r}
-tot_homs_bairros <- over(homs_01_17, shp_bairro)
-tot_homs_bairros <- tot_homs_bairros %>% group_by(cod_ibge) %>% summarise(count = n())
-df <- left_join(shp_bairro@data, tot_homs_bairros, by="cod_ibge")
-tot_homs_bairros <- shp_bairro
-tot_homs_bairros@data <- df
-rm(df)
+shp_CT@data[] <- lapply(shp_CT@data, as.character)
+writeOGR(shp_bairro, "Shapefiles/Bairro/", "Bairros_from_CTs", driver = "ESRI Shapefile")
 ```
+
+
+
+Merge points and shapes and write files
+
+```{r}
+#First merge with CTs. Get rid of unnecessary columns
+homs_wth_bairro_CT_df <- cbind(homs_01_17@data[,-15], over(homs_01_17, shp_CT))
+homs_wth_bairro_CT_df <- homs_wth_bairro_CT_df[,-16]
+
+#Make this the df for a shapefile
+homs_wth_bairro_CT_shp <- homs_01_17
+homs_wth_bairro_CT_shp@data <- homs_wth_bairro_CT_df
+
+#Write
+write.csv(homs_wth_bairro_CT_df, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/homs_wth_bairro_CT_df.csv")
+
+writeOGR(homs_wth_bairro_CT_shp, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles", "homs_wth_bairro_CT_shp", driver = "ESRI Shapefile")
+```
+
+Now I am going to add count information to the CT and bairro shapefiles.
+
+##IMPORTANT NOTE
+The total count will still include those with missing age and sex variables.
+
+There are 7 that are not assigned to any bairro.
+
+```{r}
+#First for bairros, count using cd_geocodb. Then merge the count data to a df of bairros.
+
+bairros_with_homs <- homs_wth_bairro_CT_df  %>% group_by(CD_GEOCODB) %>% summarise(count = n())
+
+bairros_with_homs <- left_join(shp_bairro@data, bairros_with_homs, by=c("cod_ibge"="CD_GEOCODB"))
+
+colnames(bairros_with_homs) = c("id", "Bairro", "ser", "CD_GEOCODB", "hom_total")
+
+#Next for CTs, count using cd_geocodi. Then merge the count data to a df of CTs
+CTs_with_homs <- homs_wth_bairro_CT_df  %>% group_by(CD_GEOCODI) %>% summarise(count = n())
+
+CTs_with_homs <- left_join(shp_CT@data, CTs_with_homs, by="CD_GEOCODI")
+
+#Putting count as zero in the CTs where no homicides were counted.
+CTs_with_homs[is.na(CTs_with_homs$count),"count"] <- 0
+
+#Write CSV files
+write.csv(bairros_with_homs, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/bairros_with_total_count.csv")
+write.csv(CTs_with_homs, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CTs_with_total_count.csv")
+
+```
+
+
 
