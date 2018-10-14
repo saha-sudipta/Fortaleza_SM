@@ -1,0 +1,103 @@
+---
+title: "Merging and Cleaning 2001-11 and 11-17 data"
+output: html_notebook
+---
+
+Load libraries
+
+```{r message=FALSE}
+library(rgdal)
+library(spdep)
+library(dplyr)
+library(lubridate)
+library(maptools)
+```
+
+Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.
+
+```{r}
+homs_01_10 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10/", "hom2001a2010_final")
+
+homs_11_17 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17/", "hom2011a2017_06042018" )
+
+```
+
+Rename columns to enable merge
+
+YOD = Year of Death
+DOD = Date of Death
+HOD = Hour of Death
+DOB = Date of Birth
+
+```{r}
+#Select specific columns in each
+homs_01_10@data <- select(homs_01_10@data, NAME, ANO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, nome_novo)
+
+homs_11_17@data <- select(homs_11_17@data, NUMERODO, ANO_OBITO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, BAIRRONOVO)
+
+colnames(homs_01_10@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+colnames(homs_11_17@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+#MERGE
+
+homs_01_17 <- do.call(rbind, list(homs_01_10, homs_11_17))
+```
+
+Detect and delete duplicates
+
+
+Then get rid of duplicates
+Will compare all fields except potential_ID
+homs_01_17
+
+```{r}
+df <- homs_01_17@data
+df$coords.x1 <- round(homs_01_17@coords[,1], 1)
+df$coords.x2 <- round(homs_01_17@coords[,2], 1)
+
+homs_01_17 <- homs_01_17[!duplicated(df),]
+rm(df)
+```
+
+
+Creating dates
+
+```{r}
+homs_01_17$DOD = as.Date(strptime(homs_01_17$DOD, "%d%m%Y"))
+homs_01_17$DOB = as.Date(strptime(homs_01_17$DOB, "%d%m%Y"))
+homs_01_17$Age <- interval(homs_01_17$DOB, homs_01_17$DOD) / years(1)
+```
+
+Group ages
+
+```{r}
+homs_01_17$AgeGroup <- cut(homs_01_17$Age, breaks=c(0, 15, 25, 45, 65, Inf), labels=c("0-14","15-24","25-44","45-64","65+"))
+```
+
+Read in and merge with shapefile at Bairro and CT level
+
+```{r}
+shp_bairro <- readOGR("Shapefiles/Bairro/", "City_shape_corrected")
+shp_CT <- readOGR("Shapefiles/CTs/", "Corrected_CTs")
+shp_CT@data <- left_join(shp_CT@data, shp_bairro@data[,-1], by=c("CD_GEOCODB"="cod_ibge"))
+```
+
+Project CT shapefile into the same projection as point and bairro data
+
+```{r}
+def_CRS <- homs_01_17@proj4string
+shp_CT <- spTransform(shp_CT, def_CRS)
+```
+
+Merge points and shapes
+
+```{r}
+tot_homs_bairros <- over(homs_01_17, shp_bairro)
+tot_homs_bairros <- tot_homs_bairros %>% group_by(cod_ibge) %>% summarise(count = n())
+df <- left_join(shp_bairro@data, tot_homs_bairros, by="cod_ibge")
+tot_homs_bairros <- shp_bairro
+tot_homs_bairros@data <- df
+rm(df)
+```
+
