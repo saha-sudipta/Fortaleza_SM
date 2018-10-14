@@ -175,51 +175,43 @@ $(document).ready(function () {
 <p>Load libraries</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShyZ2RhbClcbmxpYnJhcnkoc3BkZXApXG5saWJyYXJ5KGRwbHlyKVxubGlicmFyeShsdWJyaWRhdGUpXG5saWJyYXJ5KG1hcHRvb2xzKVxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShyZ2RhbClcbmxpYnJhcnkoc3BkZXApXG5saWJyYXJ5KGRwbHlyKVxubGlicmFyeShsdWJyaWRhdGUpXG5saWJyYXJ5KG1hcHRvb2xzKVxuXG5gYGAifQ== -->
 <pre class="r"><code>library(rgdal)
 library(spdep)
 library(dplyr)
 library(lubridate)
-library(maptools)</code></pre>
+library(maptools)
+</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaG9tc18wMV8xMCA8LSByZWFkT0dSKFwifi9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMDFfMTAvXCIsIFwiaG9tMjAwMWEyMDEwX2ZpbmFsXCIpXG5gYGAifQ== -->
-<pre class="r"><code>homs_01_10 &lt;- readOGR(&quot;~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10/&quot;, &quot;hom2001a2010_final&quot;)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaG9tc18wMV8xMCA8LSByZWFkT0dSKFwifi9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMDFfMTAvXCIsIFwiaG9tMjAwMWEyMDEwX2ZpbmFsXCIpXG5cbmhvbXNfMTFfMTcgPC0gcmVhZE9HUihcIn4vRG9jdW1lbnRzL0hhcnZhcmQgLSBTTTgwL1RoZXNpcy9Gb3J0YWxlemFfSG9tX1JHaXRfUFJJVkFURV9GaWxlcy8yMDExXzE3L1wiLCBcImhvbTIwMTFhMjAxN18wNjA0MjAxOFwiIClcblxuYGBgIn0= -->
+<pre class="r"><code>homs_01_10 &lt;- readOGR(&quot;~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10/&quot;, &quot;hom2001a2010_final&quot;)
+
+homs_11_17 &lt;- readOGR(&quot;~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17/&quot;, &quot;hom2011a2017_06042018&quot; )
+</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiT0dSIGRhdGEgc291cmNlIHdpdGggZHJpdmVyOiBFU1JJIFNoYXBlZmlsZSBcblNvdXJjZTogXCIvVXNlcnMvU3VkaXB0YS9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMDFfMTBcIiwgbGF5ZXI6IFwiaG9tMjAwMWEyMDEwX2ZpbmFsXCJcbndpdGggNzIzMSBmZWF0dXJlc1xuSXQgaGFzIDczIGZpZWxkc1xuSW50ZWdlcjY0IGZpZWxkcyByZWFkIGFzIHN0cmluZ3M6ICBaSUQgXG4ifQ== -->
-<pre><code>OGR data source with driver: ESRI Shapefile 
-Source: &quot;/Users/Sudipta/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10&quot;, layer: &quot;hom2001a2010_final&quot;
-with 7231 features
-It has 73 fields
-Integer64 fields read as strings:  ZID </code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaG9tc18xMV8xNyA8LSByZWFkT0dSKFwifi9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMTFfMTcvXCIsIFwiaG9tMjAxMWEyMDE3XzA2MDQyMDE4XCIgKVxuYGBgIn0= -->
-<pre class="r"><code>homs_11_17 &lt;- readOGR(&quot;~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17/&quot;, &quot;hom2011a2017_06042018&quot; )</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiT0dSIGRhdGEgc291cmNlIHdpdGggZHJpdmVyOiBFU1JJIFNoYXBlZmlsZSBcblNvdXJjZTogXCIvVXNlcnMvU3VkaXB0YS9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMTFfMTdcIiwgbGF5ZXI6IFwiaG9tMjAxMWEyMDE3XzA2MDQyMDE4XCJcbndpdGggMTE0OTggZmVhdHVyZXNcbkl0IGhhcyA0MSBmaWVsZHNcbkludGVnZXI2NCBmaWVsZHMgcmVhZCBhcyBzdHJpbmdzOiAgWklEIFxuIn0= -->
-<pre><code>OGR data source with driver: ESRI Shapefile 
-Source: &quot;/Users/Sudipta/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17&quot;, layer: &quot;hom2011a2017_06042018&quot;
-with 11498 features
-It has 41 fields
-Integer64 fields read as strings:  ZID </code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Rename columns to enable merge</p>
 <p>YOD = Year of Death DOD = Date of Death HOD = Hour of Death DOB = Date of Birth</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI1NlbGVjdCBzcGVjaWZpYyBjb2x1bW5zIGluIGVhY2hcbmhvbXNfMDFfMTBAZGF0YSA8LSBzZWxlY3QoaG9tc18wMV8xMEBkYXRhLCBOQU1FLCBBTk8sIERUT0JJVE8sIEhPUkFPQklUTywgRFROQVNDLCBJREFERSwgU0VYTywgUkFDQUNPUiwgQ0FVU0FCQVMsIExJTkhBQSwgTElOSEFCLCBMSU5IQUMsIExJTkhBRCwgTElOSEFJSSwgbm9tZV9ub3ZvKVxuaG9tc18xMV8xN0BkYXRhIDwtIHNlbGVjdChob21zXzExXzE3QGRhdGEsIE5VTUVST0RPLCBBTk9fT0JJVE8sIERUT0JJVE8sIEhPUkFPQklUTywgRFROQVNDLCBJREFERSwgU0VYTywgUkFDQUNPUiwgQ0FVU0FCQVMsIExJTkhBQSwgTElOSEFCLCBMSU5IQUMsIExJTkhBRCwgTElOSEFJSSwgQkFJUlJPTk9WTylcbmNvbG5hbWVzKGhvbXNfMDFfMTBAZGF0YSkgPC0gYyhcInBvc3NpYmxlX0lEXCIsIFwiWU9EXCIsIFwiRE9EXCIsIFwiSE9EXCIsIFwiRE9CXCIsIFwiQWdlXCIsIFwiU2V4XCIsIFwiUmFjZVwiLCBcIkJhc2VfY2F1c2VcIiwgXCJMaW5lQVwiLCBcIkxpbmVCXCIsIFwiTGluZUNcIiwgXCJMaW5lRFwiLCBcIkxpbmVJSVwiLCBcIkJhaXJyb1wiKVxuY29sbmFtZXMoaG9tc18xMV8xN0BkYXRhKSA8LSBjKFwicG9zc2libGVfSURcIiwgXCJZT0RcIiwgXCJET0RcIiwgXCJIT0RcIiwgXCJET0JcIiwgXCJBZ2VcIiwgXCJTZXhcIiwgXCJSYWNlXCIsIFwiQmFzZV9jYXVzZVwiLCBcIkxpbmVBXCIsIFwiTGluZUJcIiwgXCJMaW5lQ1wiLCBcIkxpbmVEXCIsIFwiTGluZUlJXCIsIFwiQmFpcnJvXCIpXG4jTUVSR0VcbmhvbXNfMDFfMTcgPC0gZG8uY2FsbChyYmluZCwgbGlzdChob21zXzAxXzEwLCBob21zXzExXzE3KSlcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI1NlbGVjdCBzcGVjaWZpYyBjb2x1bW5zIGluIGVhY2hcbmhvbXNfMDFfMTBAZGF0YSA8LSBzZWxlY3QoaG9tc18wMV8xMEBkYXRhLCBOQU1FLCBBTk8sIERUT0JJVE8sIEhPUkFPQklUTywgRFROQVNDLCBJREFERSwgU0VYTywgUkFDQUNPUiwgQ0FVU0FCQVMsIExJTkhBQSwgTElOSEFCLCBMSU5IQUMsIExJTkhBRCwgTElOSEFJSSwgbm9tZV9ub3ZvKVxuXG5ob21zXzExXzE3QGRhdGEgPC0gc2VsZWN0KGhvbXNfMTFfMTdAZGF0YSwgTlVNRVJPRE8sIEFOT19PQklUTywgRFRPQklUTywgSE9SQU9CSVRPLCBEVE5BU0MsIElEQURFLCBTRVhPLCBSQUNBQ09SLCBDQVVTQUJBUywgTElOSEFBLCBMSU5IQUIsIExJTkhBQywgTElOSEFELCBMSU5IQUlJLCBCQUlSUk9OT1ZPKVxuXG5jb2xuYW1lcyhob21zXzAxXzEwQGRhdGEpIDwtIGMoXCJwb3NzaWJsZV9JRFwiLCBcIllPRFwiLCBcIkRPRFwiLCBcIkhPRFwiLCBcIkRPQlwiLCBcIkFnZVwiLCBcIlNleFwiLCBcIlJhY2VcIiwgXCJCYXNlX2NhdXNlXCIsIFwiTGluZUFcIiwgXCJMaW5lQlwiLCBcIkxpbmVDXCIsIFwiTGluZURcIiwgXCJMaW5lSUlcIiwgXCJCYWlycm9cIilcblxuY29sbmFtZXMoaG9tc18xMV8xN0BkYXRhKSA8LSBjKFwicG9zc2libGVfSURcIiwgXCJZT0RcIiwgXCJET0RcIiwgXCJIT0RcIiwgXCJET0JcIiwgXCJBZ2VcIiwgXCJTZXhcIiwgXCJSYWNlXCIsIFwiQmFzZV9jYXVzZVwiLCBcIkxpbmVBXCIsIFwiTGluZUJcIiwgXCJMaW5lQ1wiLCBcIkxpbmVEXCIsIFwiTGluZUlJXCIsIFwiQmFpcnJvXCIpXG5cbiNNRVJHRVxuXG5ob21zXzAxXzE3IDwtIGRvLmNhbGwocmJpbmQsIGxpc3QoaG9tc18wMV8xMCwgaG9tc18xMV8xNykpXG5gYGAifQ== -->
 <pre class="r"><code>#Select specific columns in each
 homs_01_10@data &lt;- select(homs_01_10@data, NAME, ANO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, nome_novo)
+
 homs_11_17@data &lt;- select(homs_11_17@data, NUMERODO, ANO_OBITO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, BAIRRONOVO)
+
 colnames(homs_01_10@data) &lt;- c(&quot;possible_ID&quot;, &quot;YOD&quot;, &quot;DOD&quot;, &quot;HOD&quot;, &quot;DOB&quot;, &quot;Age&quot;, &quot;Sex&quot;, &quot;Race&quot;, &quot;Base_cause&quot;, &quot;LineA&quot;, &quot;LineB&quot;, &quot;LineC&quot;, &quot;LineD&quot;, &quot;LineII&quot;, &quot;Bairro&quot;)
+
 colnames(homs_11_17@data) &lt;- c(&quot;possible_ID&quot;, &quot;YOD&quot;, &quot;DOD&quot;, &quot;HOD&quot;, &quot;DOB&quot;, &quot;Age&quot;, &quot;Sex&quot;, &quot;Race&quot;, &quot;Base_cause&quot;, &quot;LineA&quot;, &quot;LineB&quot;, &quot;LineC&quot;, &quot;LineD&quot;, &quot;LineII&quot;, &quot;Bairro&quot;)
+
 #MERGE
+
 homs_01_17 &lt;- do.call(rbind, list(homs_01_10, homs_11_17))</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
@@ -228,10 +220,11 @@ homs_01_17 &lt;- do.call(rbind, list(homs_01_10, homs_11_17))</code></pre>
 <p>Then get rid of duplicates Will compare all fields except potential_ID homs_01_17</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGYgPC0gaG9tc18wMV8xN0BkYXRhXG5kZiRjb29yZHMueDEgPC0gcm91bmQoaG9tc18wMV8xN0Bjb29yZHNbLDFdLCAxKVxuZGYkY29vcmRzLngyIDwtIHJvdW5kKGhvbXNfMDFfMTdAY29vcmRzWywyXSwgMSlcbmhvbXNfMDFfMTcgPC0gaG9tc18wMV8xN1shZHVwbGljYXRlZChkZiksXVxucm0oZGYpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGYgPC0gaG9tc18wMV8xN0BkYXRhXG5kZiRjb29yZHMueDEgPC0gcm91bmQoaG9tc18wMV8xN0Bjb29yZHNbLDFdLCAxKVxuZGYkY29vcmRzLngyIDwtIHJvdW5kKGhvbXNfMDFfMTdAY29vcmRzWywyXSwgMSlcblxuaG9tc18wMV8xNyA8LSBob21zXzAxXzE3WyFkdXBsaWNhdGVkKGRmKSxdXG5ybShkZilcbmBgYCJ9 -->
 <pre class="r"><code>df &lt;- homs_01_17@data
 df$coords.x1 &lt;- round(homs_01_17@coords[,1], 1)
 df$coords.x2 &lt;- round(homs_01_17@coords[,2], 1)
+
 homs_01_17 &lt;- homs_01_17[!duplicated(df),]
 rm(df)</code></pre>
 <!-- rnb-source-end -->
@@ -258,26 +251,10 @@ homs_01_17$Age &lt;- interval(homs_01_17$DOB, homs_01_17$DOD) / years(1)</code><
 <p>Read in and merge with shapefile at Bairro and CT level</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2hwX2JhaXJybyA8LSByZWFkT0dSKFwiU2hhcGVmaWxlcy9CYWlycm8vXCIsIFwiQ2l0eV9zaGFwZV9jb3JyZWN0ZWRcIilcbmBgYCJ9 -->
-<pre class="r"><code>shp_bairro &lt;- readOGR(&quot;Shapefiles/Bairro/&quot;, &quot;City_shape_corrected&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiT0dSIGRhdGEgc291cmNlIHdpdGggZHJpdmVyOiBFU1JJIFNoYXBlZmlsZSBcblNvdXJjZTogXCIvVXNlcnMvU3VkaXB0YS9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdC9TaGFwZWZpbGVzL0JhaXJyb1wiLCBsYXllcjogXCJDaXR5X3NoYXBlX2NvcnJlY3RlZFwiXG53aXRoIDExOSBmZWF0dXJlc1xuSXQgaGFzIDQgZmllbGRzXG4ifQ== -->
-<pre><code>OGR data source with driver: ESRI Shapefile 
-Source: &quot;/Users/Sudipta/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Shapefiles/Bairro&quot;, layer: &quot;City_shape_corrected&quot;
-with 119 features
-It has 4 fields</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2hwX0NUIDwtIHJlYWRPR1IoXCJTaGFwZWZpbGVzL0NUcy9cIiwgXCJDb3JyZWN0ZWRfQ1RzXCIpXG5gYGAifQ== -->
-<pre class="r"><code>shp_CT &lt;- readOGR(&quot;Shapefiles/CTs/&quot;, &quot;Corrected_CTs&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiT0dSIGRhdGEgc291cmNlIHdpdGggZHJpdmVyOiBFU1JJIFNoYXBlZmlsZSBcblNvdXJjZTogXCIvVXNlcnMvU3VkaXB0YS9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdC9TaGFwZWZpbGVzL0NUc1wiLCBsYXllcjogXCJDb3JyZWN0ZWRfQ1RzXCJcbndpdGggMzA0NCBmZWF0dXJlc1xuSXQgaGFzIDEzIGZpZWxkc1xuIn0= -->
-<pre><code>OGR data source with driver: ESRI Shapefile 
-Source: &quot;/Users/Sudipta/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Shapefiles/CTs&quot;, layer: &quot;Corrected_CTs&quot;
-with 3044 features
-It has 13 fields</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2hwX0NUQGRhdGEgPC0gbGVmdF9qb2luKHNocF9DVEBkYXRhLCBzaHBfYmFpcnJvQGRhdGFbLC0xXSwgYnk9YyhcIkNEX0dFT0NPREJcIj1cImNvZF9pYmdlXCIpKVxuYGBgIn0= -->
-<pre class="r"><code>shp_CT@data &lt;- left_join(shp_CT@data, shp_bairro@data[,-1], by=c(&quot;CD_GEOCODB&quot;=&quot;cod_ibge&quot;))</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2hwX2JhaXJybyA8LSByZWFkT0dSKFwiU2hhcGVmaWxlcy9CYWlycm8vXCIsIFwiQ2l0eV9zaGFwZV9jb3JyZWN0ZWRcIilcbnNocF9DVCA8LSByZWFkT0dSKFwiU2hhcGVmaWxlcy9DVHMvXCIsIFwiQ29ycmVjdGVkX0NUc1wiKVxuc2hwX0NUQGRhdGEgPC0gbGVmdF9qb2luKHNocF9DVEBkYXRhLCBzaHBfYmFpcnJvQGRhdGFbLC0xXSwgYnk9YyhcIkNEX0dFT0NPREJcIj1cImNvZF9pYmdlXCIpKVxuYGBgIn0= -->
+<pre class="r"><code>shp_bairro &lt;- readOGR(&quot;Shapefiles/Bairro/&quot;, &quot;City_shape_corrected&quot;)
+shp_CT &lt;- readOGR(&quot;Shapefiles/CTs/&quot;, &quot;Corrected_CTs&quot;)
+shp_CT@data &lt;- left_join(shp_CT@data, shp_bairro@data[,-1], by=c(&quot;CD_GEOCODB&quot;=&quot;cod_ibge&quot;))</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -305,7 +282,7 @@ rm(df)</code></pre>
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiTWVyZ2luZyBhbmQgQ2xlYW5pbmcgMjAwMS0xMSBhbmQgMTEtMTcgZGF0YSIKb3V0cHV0OiBodG1sX25vdGVib29rCi0tLQoKTG9hZCBsaWJyYXJpZXMKCmBgYHtyIG1lc3NhZ2U9RkFMU0V9CmxpYnJhcnkocmdkYWwpCmxpYnJhcnkoc3BkZXApCmxpYnJhcnkoZHBseXIpCmxpYnJhcnkobHVicmlkYXRlKQpsaWJyYXJ5KG1hcHRvb2xzKQpgYGAKClJlYWQgaW4gU3BhdGlhbCBQb2ludCBGaWxlcy4gMjAwMS0xMCBhcmUgaW4gb25lIGZpbGUgYW5kIDExLTE3IGFyZSBpbiBhbm90aGVyLgoKYGBge3J9CmhvbXNfMDFfMTAgPC0gcmVhZE9HUigifi9Eb2N1bWVudHMvSGFydmFyZCAtIFNNODAvVGhlc2lzL0ZvcnRhbGV6YV9Ib21fUkdpdF9QUklWQVRFX0ZpbGVzLzIwMDFfMTAvIiwgImhvbTIwMDFhMjAxMF9maW5hbCIpCgpob21zXzExXzE3IDwtIHJlYWRPR1IoIn4vRG9jdW1lbnRzL0hhcnZhcmQgLSBTTTgwL1RoZXNpcy9Gb3J0YWxlemFfSG9tX1JHaXRfUFJJVkFURV9GaWxlcy8yMDExXzE3LyIsICJob20yMDExYTIwMTdfMDYwNDIwMTgiICkKCmBgYAoKUmVuYW1lIGNvbHVtbnMgdG8gZW5hYmxlIG1lcmdlCgpZT0QgPSBZZWFyIG9mIERlYXRoCkRPRCA9IERhdGUgb2YgRGVhdGgKSE9EID0gSG91ciBvZiBEZWF0aApET0IgPSBEYXRlIG9mIEJpcnRoCgpgYGB7cn0KI1NlbGVjdCBzcGVjaWZpYyBjb2x1bW5zIGluIGVhY2gKaG9tc18wMV8xMEBkYXRhIDwtIHNlbGVjdChob21zXzAxXzEwQGRhdGEsIE5BTUUsIEFOTywgRFRPQklUTywgSE9SQU9CSVRPLCBEVE5BU0MsIElEQURFLCBTRVhPLCBSQUNBQ09SLCBDQVVTQUJBUywgTElOSEFBLCBMSU5IQUIsIExJTkhBQywgTElOSEFELCBMSU5IQUlJLCBub21lX25vdm8pCgpob21zXzExXzE3QGRhdGEgPC0gc2VsZWN0KGhvbXNfMTFfMTdAZGF0YSwgTlVNRVJPRE8sIEFOT19PQklUTywgRFRPQklUTywgSE9SQU9CSVRPLCBEVE5BU0MsIElEQURFLCBTRVhPLCBSQUNBQ09SLCBDQVVTQUJBUywgTElOSEFBLCBMSU5IQUIsIExJTkhBQywgTElOSEFELCBMSU5IQUlJLCBCQUlSUk9OT1ZPKQoKY29sbmFtZXMoaG9tc18wMV8xMEBkYXRhKSA8LSBjKCJwb3NzaWJsZV9JRCIsICJZT0QiLCAiRE9EIiwgIkhPRCIsICJET0IiLCAiQWdlIiwgIlNleCIsICJSYWNlIiwgIkJhc2VfY2F1c2UiLCAiTGluZUEiLCAiTGluZUIiLCAiTGluZUMiLCAiTGluZUQiLCAiTGluZUlJIiwgIkJhaXJybyIpCgpjb2xuYW1lcyhob21zXzExXzE3QGRhdGEpIDwtIGMoInBvc3NpYmxlX0lEIiwgIllPRCIsICJET0QiLCAiSE9EIiwgIkRPQiIsICJBZ2UiLCAiU2V4IiwgIlJhY2UiLCAiQmFzZV9jYXVzZSIsICJMaW5lQSIsICJMaW5lQiIsICJMaW5lQyIsICJMaW5lRCIsICJMaW5lSUkiLCAiQmFpcnJvIikKCiNNRVJHRQoKaG9tc18wMV8xNyA8LSBkby5jYWxsKHJiaW5kLCBsaXN0KGhvbXNfMDFfMTAsIGhvbXNfMTFfMTcpKQpgYGAKCkRldGVjdCBhbmQgZGVsZXRlIGR1cGxpY2F0ZXMKCgpUaGVuIGdldCByaWQgb2YgZHVwbGljYXRlcwpXaWxsIGNvbXBhcmUgYWxsIGZpZWxkcyBleGNlcHQgcG90ZW50aWFsX0lECmhvbXNfMDFfMTcKCmBgYHtyfQpkZiA8LSBob21zXzAxXzE3QGRhdGEKZGYkY29vcmRzLngxIDwtIHJvdW5kKGhvbXNfMDFfMTdAY29vcmRzWywxXSwgMSkKZGYkY29vcmRzLngyIDwtIHJvdW5kKGhvbXNfMDFfMTdAY29vcmRzWywyXSwgMSkKCmhvbXNfMDFfMTcgPC0gaG9tc18wMV8xN1shZHVwbGljYXRlZChkZiksXQpybShkZikKYGBgCgoKQ3JlYXRpbmcgZGF0ZXMKCmBgYHtyfQpob21zXzAxXzE3JERPRCA9IGFzLkRhdGUoc3RycHRpbWUoaG9tc18wMV8xNyRET0QsICIlZCVtJVkiKSkKaG9tc18wMV8xNyRET0IgPSBhcy5EYXRlKHN0cnB0aW1lKGhvbXNfMDFfMTckRE9CLCAiJWQlbSVZIikpCmhvbXNfMDFfMTckQWdlIDwtIGludGVydmFsKGhvbXNfMDFfMTckRE9CLCBob21zXzAxXzE3JERPRCkgLyB5ZWFycygxKQpgYGAKCkdyb3VwIGFnZXMKCmBgYHtyfQpob21zXzAxXzE3JEFnZUdyb3VwIDwtIGN1dChob21zXzAxXzE3JEFnZSwgYnJlYWtzPWMoMCwgMTUsIDI1LCA0NSwgNjUsIEluZiksIGxhYmVscz1jKCIwLTE0IiwiMTUtMjQiLCIyNS00NCIsIjQ1LTY0IiwiNjUrIikpCmBgYAoKUmVhZCBpbiBhbmQgbWVyZ2Ugd2l0aCBzaGFwZWZpbGUgYXQgQmFpcnJvIGFuZCBDVCBsZXZlbAoKYGBge3J9CnNocF9iYWlycm8gPC0gcmVhZE9HUigiU2hhcGVmaWxlcy9CYWlycm8vIiwgIkNpdHlfc2hhcGVfY29ycmVjdGVkIikKc2hwX0NUIDwtIHJlYWRPR1IoIlNoYXBlZmlsZXMvQ1RzLyIsICJDb3JyZWN0ZWRfQ1RzIikKc2hwX0NUQGRhdGEgPC0gbGVmdF9qb2luKHNocF9DVEBkYXRhLCBzaHBfYmFpcnJvQGRhdGFbLC0xXSwgYnk9YygiQ0RfR0VPQ09EQiI9ImNvZF9pYmdlIikpCmBgYAoKUHJvamVjdCBDVCBzaGFwZWZpbGUgaW50byB0aGUgc2FtZSBwcm9qZWN0aW9uIGFzIHBvaW50IGFuZCBiYWlycm8gZGF0YQoKYGBge3J9CmRlZl9DUlMgPC0gaG9tc18wMV8xN0Bwcm9qNHN0cmluZwpzaHBfQ1QgPC0gc3BUcmFuc2Zvcm0oc2hwX0NULCBkZWZfQ1JTKQpgYGAKCk1lcmdlIHBvaW50cyBhbmQgc2hhcGVzCgpgYGB7cn0KdG90X2hvbXNfYmFpcnJvcyA8LSBvdmVyKGhvbXNfMDFfMTcsIHNocF9iYWlycm8pCnRvdF9ob21zX2JhaXJyb3MgPC0gdG90X2hvbXNfYmFpcnJvcyAlPiUgZ3JvdXBfYnkoY29kX2liZ2UpICU+JSBzdW1tYXJpc2UoY291bnQgPSBuKCkpCmRmIDwtIGxlZnRfam9pbihzaHBfYmFpcnJvQGRhdGEsIHRvdF9ob21zX2JhaXJyb3MsIGJ5PSJjb2RfaWJnZSIpCnRvdF9ob21zX2JhaXJyb3MgPC0gc2hwX2JhaXJybwp0b3RfaG9tc19iYWlycm9zQGRhdGEgPC0gZGYKcm0oZGYpCmBgYAoK</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiTWVyZ2luZyBhbmQgQ2xlYW5pbmcgMjAwMS0xMSBhbmQgMTEtMTcgZGF0YSIKb3V0cHV0OiBodG1sX25vdGVib29rCi0tLQoKTG9hZCBsaWJyYXJpZXMKCmBgYHtyIG1lc3NhZ2U9RkFMU0V9CmxpYnJhcnkocmdkYWwpCmxpYnJhcnkoc3BkZXApCmxpYnJhcnkoZHBseXIpCmxpYnJhcnkobHVicmlkYXRlKQpsaWJyYXJ5KG1hcHRvb2xzKQoKYGBgCgpSZWFkIGluIFNwYXRpYWwgUG9pbnQgRmlsZXMuIDIwMDEtMTAgYXJlIGluIG9uZSBmaWxlIGFuZCAxMS0xNyBhcmUgaW4gYW5vdGhlci4KCmBgYHtyfQpob21zXzAxXzEwIDwtIHJlYWRPR1IoIn4vRG9jdW1lbnRzL0hhcnZhcmQgLSBTTTgwL1RoZXNpcy9Gb3J0YWxlemFfSG9tX1JHaXRfUFJJVkFURV9GaWxlcy8yMDAxXzEwLyIsICJob20yMDAxYTIwMTBfZmluYWwiKQoKaG9tc18xMV8xNyA8LSByZWFkT0dSKCJ+L0RvY3VtZW50cy9IYXJ2YXJkIC0gU004MC9UaGVzaXMvRm9ydGFsZXphX0hvbV9SR2l0X1BSSVZBVEVfRmlsZXMvMjAxMV8xNy8iLCAiaG9tMjAxMWEyMDE3XzA2MDQyMDE4IiApCgpgYGAKClJlbmFtZSBjb2x1bW5zIHRvIGVuYWJsZSBtZXJnZQoKWU9EID0gWWVhciBvZiBEZWF0aApET0QgPSBEYXRlIG9mIERlYXRoCkhPRCA9IEhvdXIgb2YgRGVhdGgKRE9CID0gRGF0ZSBvZiBCaXJ0aAoKYGBge3J9CiNTZWxlY3Qgc3BlY2lmaWMgY29sdW1ucyBpbiBlYWNoCmhvbXNfMDFfMTBAZGF0YSA8LSBzZWxlY3QoaG9tc18wMV8xMEBkYXRhLCBOQU1FLCBBTk8sIERUT0JJVE8sIEhPUkFPQklUTywgRFROQVNDLCBJREFERSwgU0VYTywgUkFDQUNPUiwgQ0FVU0FCQVMsIExJTkhBQSwgTElOSEFCLCBMSU5IQUMsIExJTkhBRCwgTElOSEFJSSwgbm9tZV9ub3ZvKQoKaG9tc18xMV8xN0BkYXRhIDwtIHNlbGVjdChob21zXzExXzE3QGRhdGEsIE5VTUVST0RPLCBBTk9fT0JJVE8sIERUT0JJVE8sIEhPUkFPQklUTywgRFROQVNDLCBJREFERSwgU0VYTywgUkFDQUNPUiwgQ0FVU0FCQVMsIExJTkhBQSwgTElOSEFCLCBMSU5IQUMsIExJTkhBRCwgTElOSEFJSSwgQkFJUlJPTk9WTykKCmNvbG5hbWVzKGhvbXNfMDFfMTBAZGF0YSkgPC0gYygicG9zc2libGVfSUQiLCAiWU9EIiwgIkRPRCIsICJIT0QiLCAiRE9CIiwgIkFnZSIsICJTZXgiLCAiUmFjZSIsICJCYXNlX2NhdXNlIiwgIkxpbmVBIiwgIkxpbmVCIiwgIkxpbmVDIiwgIkxpbmVEIiwgIkxpbmVJSSIsICJCYWlycm8iKQoKY29sbmFtZXMoaG9tc18xMV8xN0BkYXRhKSA8LSBjKCJwb3NzaWJsZV9JRCIsICJZT0QiLCAiRE9EIiwgIkhPRCIsICJET0IiLCAiQWdlIiwgIlNleCIsICJSYWNlIiwgIkJhc2VfY2F1c2UiLCAiTGluZUEiLCAiTGluZUIiLCAiTGluZUMiLCAiTGluZUQiLCAiTGluZUlJIiwgIkJhaXJybyIpCgojTUVSR0UKCmhvbXNfMDFfMTcgPC0gZG8uY2FsbChyYmluZCwgbGlzdChob21zXzAxXzEwLCBob21zXzExXzE3KSkKYGBgCgpEZXRlY3QgYW5kIGRlbGV0ZSBkdXBsaWNhdGVzCgoKVGhlbiBnZXQgcmlkIG9mIGR1cGxpY2F0ZXMKV2lsbCBjb21wYXJlIGFsbCBmaWVsZHMgZXhjZXB0IHBvdGVudGlhbF9JRApob21zXzAxXzE3CgpgYGB7cn0KZGYgPC0gaG9tc18wMV8xN0BkYXRhCmRmJGNvb3Jkcy54MSA8LSByb3VuZChob21zXzAxXzE3QGNvb3Jkc1ssMV0sIDEpCmRmJGNvb3Jkcy54MiA8LSByb3VuZChob21zXzAxXzE3QGNvb3Jkc1ssMl0sIDEpCgpob21zXzAxXzE3IDwtIGhvbXNfMDFfMTdbIWR1cGxpY2F0ZWQoZGYpLF0Kcm0oZGYpCmBgYAoKCkNyZWF0aW5nIGRhdGVzCgpgYGB7cn0KaG9tc18wMV8xNyRET0QgPSBhcy5EYXRlKHN0cnB0aW1lKGhvbXNfMDFfMTckRE9ELCAiJWQlbSVZIikpCmhvbXNfMDFfMTckRE9CID0gYXMuRGF0ZShzdHJwdGltZShob21zXzAxXzE3JERPQiwgIiVkJW0lWSIpKQpob21zXzAxXzE3JEFnZSA8LSBpbnRlcnZhbChob21zXzAxXzE3JERPQiwgaG9tc18wMV8xNyRET0QpIC8geWVhcnMoMSkKYGBgCgpHcm91cCBhZ2VzCgpgYGB7cn0KaG9tc18wMV8xNyRBZ2VHcm91cCA8LSBjdXQoaG9tc18wMV8xNyRBZ2UsIGJyZWFrcz1jKDAsIDE1LCAyNSwgNDUsIDY1LCBJbmYpLCBsYWJlbHM9YygiMC0xNCIsIjE1LTI0IiwiMjUtNDQiLCI0NS02NCIsIjY1KyIpKQpgYGAKClJlYWQgaW4gYW5kIG1lcmdlIHdpdGggc2hhcGVmaWxlIGF0IEJhaXJybyBhbmQgQ1QgbGV2ZWwKCmBgYHtyfQpzaHBfYmFpcnJvIDwtIHJlYWRPR1IoIlNoYXBlZmlsZXMvQmFpcnJvLyIsICJDaXR5X3NoYXBlX2NvcnJlY3RlZCIpCnNocF9DVCA8LSByZWFkT0dSKCJTaGFwZWZpbGVzL0NUcy8iLCAiQ29ycmVjdGVkX0NUcyIpCnNocF9DVEBkYXRhIDwtIGxlZnRfam9pbihzaHBfQ1RAZGF0YSwgc2hwX2JhaXJyb0BkYXRhWywtMV0sIGJ5PWMoIkNEX0dFT0NPREIiPSJjb2RfaWJnZSIpKQpgYGAKClByb2plY3QgQ1Qgc2hhcGVmaWxlIGludG8gdGhlIHNhbWUgcHJvamVjdGlvbiBhcyBwb2ludCBhbmQgYmFpcnJvIGRhdGEKCmBgYHtyfQpkZWZfQ1JTIDwtIGhvbXNfMDFfMTdAcHJvajRzdHJpbmcKc2hwX0NUIDwtIHNwVHJhbnNmb3JtKHNocF9DVCwgZGVmX0NSUykKYGBgCgpNZXJnZSBwb2ludHMgYW5kIHNoYXBlcwoKYGBge3J9CnRvdF9ob21zX2JhaXJyb3MgPC0gb3Zlcihob21zXzAxXzE3LCBzaHBfYmFpcnJvKQp0b3RfaG9tc19iYWlycm9zIDwtIHRvdF9ob21zX2JhaXJyb3MgJT4lIGdyb3VwX2J5KGNvZF9pYmdlKSAlPiUgc3VtbWFyaXNlKGNvdW50ID0gbigpKQpkZiA8LSBsZWZ0X2pvaW4oc2hwX2JhaXJyb0BkYXRhLCB0b3RfaG9tc19iYWlycm9zLCBieT0iY29kX2liZ2UiKQp0b3RfaG9tc19iYWlycm9zIDwtIHNocF9iYWlycm8KdG90X2hvbXNfYmFpcnJvc0BkYXRhIDwtIGRmCnJtKGRmKQpgYGAKCg==</div>
 
 
 

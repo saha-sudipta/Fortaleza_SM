@@ -11,6 +11,7 @@ library(spdep)
 library(dplyr)
 library(lubridate)
 library(maptools)
+
 ```
 
 Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.
