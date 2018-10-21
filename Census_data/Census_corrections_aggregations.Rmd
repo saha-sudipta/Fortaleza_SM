@@ -1,0 +1,225 @@
+---
+title: "Organizing Census data"
+output: html_notebook
+---
+
+First read in Census tract shapefile. This will contain all the base information and tehn we will add the data to it.
+
+```{r}
+library(rgdal)
+census_tracts_CE <- readOGR("./CE_setores_censitarios_shape/", "23SEE250GC_SIR", use_iconv = TRUE, encoding = "latin1")
+```
+
+Load correction table and extract datatable from shapefile and filter to keep only Fortaleza CTs, apply correction and then filter again to keep Fortaleza municipality
+```{r}
+library(readr)
+library(dplyr)
+library(stringi)
+census_tracts_data <- census_tracts_CE@data
+for (i in 1:ncol(census_tracts_data)){
+  census_tracts_data[,i] <- stri_trans_general(census_tracts_data[,i], "latin-ascii")
+}
+census_tracts_data <- filter(census_tracts_data, NM_MICRO=="FORTALEZA")
+
+census_corrections <- read_csv("Census_Tract_correction_table.csv", 
+    col_types = cols(CD_GEOCODB = col_character(), 
+        CD_GEOCODB_NEW = col_character(), 
+        CD_GEOCODD = col_character(), CD_GEOCODD_NEW = col_character(), 
+        CD_GEOCODI = col_character(), CD_GEOCODM = col_character(), 
+        CD_GEOCODM_NEW = col_character(), 
+        CD_GEOCODS = col_character(), CD_GEOCODS_NEW = col_character(), 
+        ID = col_character(), NM_BAIRRO = col_character(), 
+        TIPO = col_character()))
+for (i in 1:nrow(census_tracts_data)){
+  ID_CT <- census_tracts_data[i,"ID"]
+  ID_CODI <- census_tracts_data[i,"CD_GEOCODI"]
+  if (ID_CT %in%  census_corrections$ID){
+    corr_row <- filter(census_corrections, ID==ID_CT)
+    if (ID_CODI == corr_row$CD_GEOCODI){
+      census_tracts_data[i,3:13] <- corr_row[,14:24]
+    }
+    else if (ID_CODI != corr_row$CD_GEOCODI){
+      print(paste0("ID and GEOCODI do not match for ID ", ID_CT, " and ", ID_CODI))
+    }
+  }
+}
+census_tracts_data <- filter(census_tracts_data, NM_MUNICIP=="FORTALEZA")
+```
+
+Read in census data files 
+```{r}
+Pessoa03 <- read_csv("Universal_results_CE/Pessoa03_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+Pessoa03 <- filter(Pessoa03, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+Pessoa11 <- read_csv("Universal_results_CE/Pessoa11_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+Pessoa11 <- filter(Pessoa11, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+Pessoa12 <- read_csv("Universal_results_CE/Pessoa12_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+Pessoa12 <- filter(Pessoa12, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+```
+Rename some columns in the census data
+
+```{r}
+colnames(Pessoa03)[3] <- "Total_pop"
+colnames(Pessoa11)[24] <- "M_less_1_yr"
+colnames(Pessoa12)[24] <- "F_less_1_yr"
+colnames(Pessoa11)[37:135] <- paste0("M_", 1:99, "_yr")
+colnames(Pessoa11)[136] <- "M_100_more_yr"
+colnames(Pessoa12)[37:135] <- paste0("F_", 1:99, "_yr")
+colnames(Pessoa12)[136] <- "F_100_more_yr"
+```
+
+
+Create new file with census necessary census data:
+```{r}
+census_data <- select(Pessoa03, Cod_setor, Total_pop)
+census_data <- left_join(census_data, select(Pessoa11, Cod_setor, M_less_1_yr, M_1_yr:M_100_more_yr), by="Cod_setor")
+census_data <- left_join(census_data, select(Pessoa12, Cod_setor, F_less_1_yr, F_1_yr:F_100_more_yr), by="Cod_setor")
+
+```
+
+```{r}
+census_data <- left_join(census_data, census_tracts_data[,2:5], by=c("Cod_setor"="CD_GEOCODI"))
+```
+
+```{r}
+census_data$M_14less <- rowSums(census_data[,3:17])
+census_data$M_15_24 <- rowSums(census_data[,18:27])
+census_data$M_25_44 <- rowSums(census_data[,28:47])
+census_data$M_45_64 <- rowSums(census_data[,48:67])
+census_data$M_64more <- rowSums(census_data[,68:103])
+
+census_data$F_14less <- rowSums(census_data[,104:118])
+census_data$F_15_24 <- rowSums(census_data[,119:128])
+census_data$F_25_44 <- rowSums(census_data[,129:148])
+census_data$F_45_64 <- rowSums(census_data[,149:168])
+census_data$F_64more <- rowSums(census_data[,169:204])
+```
+
+```{r}
+library(dplyr)
+census_data <- left_join(census_data, (((census_data %>% group_by(CD_GEOCODB) %>% summarise_if(is.numeric, funs(bairro_total=sum), na.rm=TRUE)))[,c(1:2,205:214)]), by="CD_GEOCODB")
+```
+
+```{r}
+write_csv(census_data, "cust_census_pop_fortaleza.csv")
+```
+
+
+Getting age and sex stratified data for Fortaleza
+```{r}
+library(tidyr)
+library(dplyr)
+census_Age_Sex <- census_data[,c(1,208:217)]
+census_Age_Sex[,2:11] <- sapply(census_Age_Sex[,2:11], as.numeric)
+fort_age_sex <- as.data.frame(colSums(census_Age_Sex[,2:11], na.rm = TRUE))
+fort_age_sex$age_sex_group <- rownames(fort_age_sex)
+colnames(fort_age_sex)[1] <- "Pop"
+census_Age_Sex_long <- gather(census_Age_Sex, age_sex_group, population, M_14less:F_64more, factor_key=TRUE)
+census_Age_Sex_long <- arrange(census_Age_Sex_long, Cod_setor)
+write.csv(fort_age_sex, "Fortaleza_Age_Sex_Stratified_pop.csv")
+write.csv(census_Age_Sex_long, "Fortaleza_by_CT_Age_Sex_Stratified_pop.csv")
+```
+```{r}
+census_tracts_corr <- census_tracts_CE
+census_tracts_corr <- census_tracts_corr[census_tracts_corr$ID %in% census_tracts_data$ID,] 
+census_tracts_corr@data <- census_tracts_data
+```
+Write file
+
+```{r}
+writeOGR(obj=census_tracts_corr, dsn="CE_setores_censitarios_shape/", layer="Corrected_CTs", driver="ESRI Shapefile")
+```
+
+##Covariate data
+
+Read in census data files 
+```{r}
+DomicilioRenda <- read_csv("Universal_results_CE/DomicilioRenda_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+DomicilioRenda <- filter(DomicilioRenda, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+Pessoa01 <- read_csv("Universal_results_CE/Pessoa01_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+Pessoa01 <- filter(Pessoa01, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+Domicilio01 <- read_csv("Universal_results_CE/Domicilio01_CEcsv.csv", na="X",
+    col_types = cols(Cod_setor = col_character()))
+Domicilio01 <- filter(Domicilio01, Cod_setor %in% census_tracts_data$CD_GEOCODI)
+
+```
+
+Rename some columns in the census data
+
+```{r}
+colnames(DomicilioRenda)[4] <- "Total_HH_inc_in_CT"
+colnames(Pessoa01)[3] <- "Lit_grtr_5yrs"
+##PPH = Permanent Private Household
+colnames(Domicilio01)[3] <- "Total_no_HH_in_CT"
+colnames(Domicilio01)[14] <- "PPH_Wtr_Spply_Ntwrk"
+colnames(Domicilio01)[19] <- "PPH_Sewerage_Conn"
+colnames(Domicilio01)[38] <- "PPH_Garbage_Col_Serv"
+colnames(Domicilio01)[45] <- "PPH_Elec"
+colnames(Pessoa03)[4] <- "Total_pop_branca"
+colnames(Pessoa03)[5] <- "Total_pop_preta"
+colnames(Pessoa03)[6] <- "Total_pop_amarela"
+colnames(Pessoa03)[7] <- "Total_pop_parda"
+colnames(Pessoa03)[8] <- "Total_pop_indigena"
+```
+
+
+Create new file with census necessary census data:
+```{r}
+census_covar_data <- dplyr::select(DomicilioRenda, Cod_setor, Total_HH_inc_in_CT)
+census_covar_data <- left_join(census_covar_data, dplyr::select(Pessoa01, Cod_setor, Lit_grtr_5yrs), by="Cod_setor")
+census_covar_data <- left_join(census_covar_data, dplyr::select(Domicilio01, Cod_setor, Total_no_HH_in_CT, PPH_Wtr_Spply_Ntwrk, PPH_Sewerage_Conn, PPH_Garbage_Col_Serv, PPH_Elec), by="Cod_setor")
+census_covar_data <- left_join(census_covar_data, dplyr::select(Pessoa03, Cod_setor, Total_pop_branca, Total_pop_preta, Total_pop_amarela, Total_pop_parda, Total_pop_indigena), by="Cod_setor")
+```
+
+```{r}
+census_covar_data <- left_join(census_covar_data, census_tracts_data[,2:5], by=c("Cod_setor"="CD_GEOCODI"))
+census_covar_data <- left_join(census_covar_data, dplyr::select(census_data, Total_pop, Cod_setor), by=c("Cod_setor"))
+census_covar_data$Lit_rate <- census_covar_data$Lit_grtr_5yrs / census_covar_data$Total_pop
+census_covar_data$Mean_HH_inc <- census_covar_data$Total_HH_inc_in_CT / census_covar_data$Total_no_HH_in_CT
+census_covar_data$Perc_Wtr_Spply_Ntwrk <- census_covar_data$PPH_Wtr_Spply_Ntwrk / census_covar_data$Total_no_HH_in_CT
+census_covar_data$Perc_Sewerage_Conn <- census_covar_data$PPH_Sewerage_Conn / census_covar_data$Total_no_HH_in_CT
+census_covar_data$Perc_Garbage_Col_Serv <- census_covar_data$PPH_Garbage_Col_Serv / census_covar_data$Total_no_HH_in_CT
+census_covar_data$Perc_PPH_Elec <- census_covar_data$PPH_Elec / census_covar_data$Total_no_HH_in_CT
+census_covar_data$Perc_branca <- census_covar_data$Total_pop_branca / census_covar_data$Total_pop
+census_covar_data$Perc_preta <- census_covar_data$Total_pop_preta / census_covar_data$Total_pop
+census_covar_data$Perc_amarela <- census_covar_data$Total_pop_amarela / census_covar_data$Total_pop
+census_covar_data$Perc_parda <- census_covar_data$Total_pop_parda / census_covar_data$Total_pop
+census_covar_data$Perc_indigena <- census_covar_data$Total_pop_indigena / census_covar_data$Total_pop
+```
+
+```{r}
+write_csv(census_covar_data, "census_covariates_Fortaleza.csv")
+```
+
+
+```{r}
+census_covar_data_bairro <- census_covar_data %>% group_by(CD_GEOCODB)
+census_covar_data_bairro <- summarise_at(census_covar_data_bairro, vars(matches("^Total|^PPH|^Lit_grtr")), funs(bairro_sum=sum), na.rm=TRUE)
+```
+
+```{r}
+census_covar_data_bairro$Lit_rate <- census_covar_data_bairro$Lit_grtr_5yrs_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+census_covar_data_bairro$Mean_HH_inc <- census_covar_data_bairro$Total_HH_inc_in_CT_bairro_sum / census_covar_data_bairro$Total_no_HH_in_CT_bairro_sum
+census_covar_data_bairro$Perc_Wtr_Spply_Ntwrk <- census_covar_data_bairro$PPH_Wtr_Spply_Ntwrk_bairro_sum / census_covar_data_bairro$Total_no_HH_in_CT_bairro_sum
+census_covar_data_bairro$Perc_Sewerage_Conn <- census_covar_data_bairro$PPH_Sewerage_Conn_bairro_sum / census_covar_data_bairro$Total_no_HH_in_CT_bairro_sum
+census_covar_data_bairro$Perc_Garbage_Col_Serv <- census_covar_data_bairro$PPH_Garbage_Col_Serv_bairro_sum / census_covar_data_bairro$Total_no_HH_in_CT_bairro_sum
+census_covar_data_bairro$Perc_PPH_Elec <- census_covar_data_bairro$PPH_Elec_bairro_sum / census_covar_data_bairro$Total_no_HH_in_CT_bairro_sum
+census_covar_data_bairro$Perc_branca <- census_covar_data_bairro$Total_pop_branca_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+census_covar_data_bairro$Perc_preta <- census_covar_data_bairro$Total_pop_preta_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+census_covar_data_bairro$Perc_amarela <- census_covar_data_bairro$Total_pop_amarela_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+census_covar_data_bairro$Perc_parda <- census_covar_data_bairro$Total_pop_parda_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+census_covar_data_bairro$Perc_indigena <- census_covar_data_bairro$Total_pop_indigena_bairro_sum / census_covar_data_bairro$Total_pop_bairro_sum
+write_csv(census_covar_data_bairro, "census_covariates_bairro_Fortaleza.csv")
+```
+
+
+

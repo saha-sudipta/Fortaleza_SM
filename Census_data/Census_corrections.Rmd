@@ -1,0 +1,286 @@
+---
+title: "Census Corrections"
+output: html_notebook
+---
+
+When trying to use census tracts, I realized that there were some census tracts that were mislabelled with the wrong Bairro IBGE code, and the wrong Bairro name. This was affecting the aggregation at the bairro level, such that some neighborhoods like Manuel Dias Branco had 3000 people missing who had been aggregated to Praia do Futuro II. Moreover, since the census happened, the new neighborhoods of Boa Vista, Olavo Oliveira and Parque Santa Maria were created. These also have to be assigned the right census tracts.
+
+Thus I checked all census tracts to make sure they were being aggregated at the the right neighborhood. Based on this I made a correction table, the details of which are described here.
+
+At the end there is a comparison of old and new population totals before and after correction.
+
+#####1. Vila Ellery in Alvaro Weyne
+
+![Vila Ellery in Alvaro Weyne](Screen Shot 2018-06-05 at 12.04.09 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[1,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[1,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####2. Varjota and De Loudres in Papicu
+
+![Varjota and De Loudres in Papicu](Screen Shot 2018-06-05 at 12.08.41 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[2:5,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[2:5,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####3. Varjota in Meireles
+
+![Varjota in Meireles](Screen Shot 2018-06-05 at 12.12.35 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[6,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[6,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####4. Parreo in Sao Joao do Taupe
+
+![Parreo in Sao Joao do Taupe](Screen Shot 2018-06-05 at 8.22.16 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[7,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[7,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####5. Praia do Futuro II in Manuel Dias Branco
+
+![Praia do Futuro II in Manuel Dias Branco](Screen Shot 2018-06-05 at 8.24.43 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[8:10,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[8:10,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####6. Praia do Futuro I in Praia do Futuro II
+
+![Praia do Futuro I in Praia do Futuro II](Screen Shot 2018-06-05 at 8.32.37 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[11:12,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[11:12,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####7. Gentilandia and Alvaro Weyne in Benfica
+
+![Gentilandia and Alvaro Weyne in Benfica](Screen Shot 2018-06-05 at 8.37.17 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[13:20,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[13:20,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####8. Conjunto Esperanca in Granja Lisboa
+
+![Conjunto Esperanca in Granja Lisboa](Screen Shot 2018-06-05 at 8.41.06 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[21,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[21,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####9. Cajazeiras in Barroso
+
+![Cajazeiras in Barroso](Screen Shot 2018-06-05 at 8.43.42 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[22,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[22,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####10. Conjunto Palmeiras in Jangurussu
+
+![Conjunto Palmeiras in Jangurussu](Screen Shot 2018-06-05 at 8.46.05 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[23:27,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[23:27,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####11. Sao Bento in Paupina
+
+![Sao Bento in Paupina](Screen Shot 2018-06-05 at 9.06.06 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[28:29,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[28:29,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####12. Unnamed Eusebio bairro in Sabiaguaba
+
+It seems like Fortaleza's boundary in Sabiaguaba has increased since the census. Adding the highlighted census tract still does not cover all of the new boundaries, but the census tracts below go far beyond the existing boundaries. Moreover, looking at the basemap suggests that there are no significant populations in the edge of Sabiaguaba.
+
+![Unnamed Eusebio bairro in Sabiaguaba](Screen Shot 2018-06-05 at 9.08.12 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[30,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[30,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####13. Jangurussu in Conjunto Palmeiras
+
+![Jangurussu in Conjunto Palmeiras](Screen Shot 2018-06-05 at 9.27.46 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[31:32,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[31:32,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####14. Quintino Cunha divides into Olavo Oliveira
+
+![Quintino Cunha divides into Olavo Oliveira](Screen Shot 2018-06-05 at 9.29.13 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[33:44,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[33:44,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+#####15. Dias Macedo, Castelao and Mata Galinha become Boa Vista
+
+![Dias Macedo, Castelao and Mata Galinha become Boa Vista](Screen Shot 2018-06-05 at 9.33.42 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[45:58,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[45:58,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+#####16. Ancuri divides into Parque Santa Maria
+
+![Ancuri divides into Parque Santa Maria](Screen Shot 2018-06-05 at 9.34.48 AM.png)
+
+Old data 
+```{r echo=FALSE}
+kable(census_corrections[59:76,c(1:2,4:13)], "html") %>%
+  kable_styling(font_size = 11)
+```
+Corrected data 
+```{r echo=FALSE}
+kable(census_corrections[59:76,c(1:2,15:24)], "html") %>%
+  kable_styling(font_size = 11)
+```
+
+####Comparison of population totals after new aggregation
+
+```{r echo=FALSE}
+pop_nocorr <- read.csv(file = "2010_census_agg_nocorrection.csv", encoding = "latin1")
+kable(pop_nocorr, "html") %>%
+  kable_styling(font_size = 11) %>%
+  row_spec(c(6,8,13,15,16,21,25,33,34,39,42,51,52,60,74,76,77,83,86,93,97,99,105,106,109,111,113,114,117,119), bold = T, color = "white", background = "#D7261E")
+```
+
+####Overall Correction Table
+
+This table was used to correct the census tracts Bairro assignments in Fortaleza.
+
+```{r echo=FALSE}
+kable(census_corrections, "html") %>%
+  kable_styling(font_size = 11)
+```
+
+
+
+
+
+
+
+
+
+
