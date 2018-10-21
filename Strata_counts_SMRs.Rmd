@@ -1,0 +1,298 @@
+---
+title: "Counting homicides by age-sex groups and generating SMRs"
+output: html_notebook
+---
+
+Load libraries
+
+```{r message=FALSE}
+library(rgdal)
+library(spdep)
+library(dplyr)
+library(lubridate)
+library(maptools)
+library(rgeos)
+library(readr)
+```
+
+Read in required files
+
+```{r}
+homs <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/homs_wth_bairro_CT_df.csv",
+col_types = cols(CD_GEOCODB = col_character(),
+CD_GEOCODD = col_character(), CD_GEOCODI = col_character(),
+CD_GEOCODM = col_character(), CD_GEOCODS = col_character(),
+DOB = col_date(format = "%Y-%m-%d"),
+DOD = col_date(format = "%Y-%m-%d"),
+X1 = col_skip()))
+```
+
+Count by age, sex and age-sex group
+
+##IMPORTANT NOTE
+Will discard those that do not have age or sex information.
+There are 159 missing age information due to missing birth date.
+There are none missing sex information
+
+For bairros
+```{r}
+#Keep only relevant columns
+bairros_with_homs_by_age_sex <- select(homs, Age, AgeGroup, Sex, CD_GEOCODB)
+
+#Remove those without sex or age info
+bairros_with_homs_by_age_sex <- bairros_with_homs_by_age_sex[!is.na(bairros_with_homs_by_age_sex$AgeGroup),]
+
+bairros_with_homs_by_age_sex <- bairros_with_homs_by_age_sex[!is.na(bairros_with_homs_by_age_sex$Sex),]
+
+#Group and count by age sex and bairro code
+bairros_with_homs_by_age_sex <- bairros_with_homs_by_age_sex %>% group_by(CD_GEOCODB, AgeGroup, Sex) %>% summarise(hom_count_age_sex = n())
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=1190))
+df$Sex <- rep(c(rep("M",5),rep("F",5)),119)
+df$AgeGroup <- rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 119)
+df$CD_GEOCODB <- unlist(lapply(unique(bairros_with_homs_by_age_sex$CD_GEOCODB[!is.na(bairros_with_homs_by_age_sex$CD_GEOCODB)]), function(x) rep(x,10)))
+
+bairros_with_homs_by_age_sex <- left_join(df, bairros_with_homs_by_age_sex, by=c("CD_GEOCODB", "Sex", "AgeGroup"))
+
+bairros_with_homs_by_age_sex$hom_count_age_sex[is.na(bairros_with_homs_by_age_sex$hom_count_age_sex)] <- 0
+
+rm(df)
+
+```
+
+Now for bairros, with age-sex-year strata
+```{r}
+#Keep only relevant columns
+bairros_with_homs_by_age_sex_year <- select(homs, Age, AgeGroup, Sex, CD_GEOCODB, YOD)
+
+#Remove those without sex, age or info
+bairros_with_homs_by_age_sex_year <- bairros_with_homs_by_age_sex_year[!is.na(bairros_with_homs_by_age_sex_year$AgeGroup),]
+
+bairros_with_homs_by_age_sex_year <- bairros_with_homs_by_age_sex_year[!is.na(bairros_with_homs_by_age_sex_year$Sex),]
+
+#Group and count by age sex and bairro code
+bairros_with_homs_by_age_sex_year <- bairros_with_homs_by_age_sex_year %>% group_by(CD_GEOCODB, AgeGroup, Sex, YOD) %>% summarise(hom_count_age_sex_year = n())
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=20230))
+df$Sex <- rep(rep(c(rep("M",5),rep("F",5)), 119), 17)
+df$AgeGroup <- rep(rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 119), 17)
+df$YOD <- rep(unlist(lapply(2001:2017, function(x) rep(x,10))),119)
+df$CD_GEOCODB <- unlist(lapply(unique(bairros_with_homs_by_age_sex_year$CD_GEOCODB[!is.na(bairros_with_homs_by_age_sex_year$CD_GEOCODB)]), function(x) rep(x,170)))
+
+
+bairros_with_homs_by_age_sex_year <- left_join(df, bairros_with_homs_by_age_sex_year, by=c("CD_GEOCODB", "Sex", "AgeGroup", "YOD"))
+
+bairros_with_homs_by_age_sex_year$hom_count_age_sex_year[is.na(bairros_with_homs_by_age_sex_year$hom_count_age_sex_year)] <- 0
+
+rm(df)
+
+```
+
+For CTs
+
+```{r}
+#Keep only relevant columns
+CTs_with_homs_by_age_sex <- select(homs, Age, AgeGroup, Sex, CD_GEOCODI)
+
+#Remove those without sex or age info
+CTs_with_homs_by_age_sex <- CTs_with_homs_by_age_sex[!is.na(CTs_with_homs_by_age_sex$AgeGroup),]
+
+CTs_with_homs_by_age_sex <- CTs_with_homs_by_age_sex[!is.na(CTs_with_homs_by_age_sex$Sex),]
+
+#Group and count by age sex and CTcode
+CTs_with_homs_by_age_sex <- CTs_with_homs_by_age_sex %>% group_by(CD_GEOCODI, AgeGroup, Sex) %>% summarise(hom_count_age_sex = n())
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=30440))
+
+#To get unique list of CD_GEOCODI including those without homicides we need to read in a different file
+CTs_with_total_count <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CTs_with_total_count.csv", col_types = cols(CD_GEOCODI = col_character(), ID = col_skip(), X1 = col_skip()))
+
+df$CD_GEOCODI <- unlist(lapply(unique(CTs_with_total_count$CD_GEOCODI), function(x) rep(x,10)))
+rm(CTs_with_total_count)
+
+df$Sex <- rep(c(rep("M",5),rep("F",5)),3044)
+df$AgeGroup <- rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 3044)
+
+CTs_with_homs_by_age_sex <- left_join(df, CTs_with_homs_by_age_sex, by=c("CD_GEOCODI", "Sex", "AgeGroup"))
+
+CTs_with_homs_by_age_sex$hom_count_age_sex[is.na(CTs_with_homs_by_age_sex$hom_count_age_sex)] <- 0
+
+rm(df)
+
+```
+
+For CTs with Years
+
+```{r}
+#Keep only relevant columns
+CTs_with_homs_by_age_sex_year <- select(homs, Age, AgeGroup, Sex, CD_GEOCODI, YOD)
+
+#Remove those without sex or age info
+CTs_with_homs_by_age_sex_year <- CTs_with_homs_by_age_sex_year[!is.na(CTs_with_homs_by_age_sex_year$AgeGroup),]
+
+CTs_with_homs_by_age_sex_year <- CTs_with_homs_by_age_sex_year[!is.na(CTs_with_homs_by_age_sex_year$Sex),]
+
+#Group and count by age sex and CTcode
+CTs_with_homs_by_age_sex_year <- CTs_with_homs_by_age_sex_year %>% group_by(CD_GEOCODI, AgeGroup, Sex, YOD) %>% summarise(hom_count_age_sex_year = n())
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=517480))
+
+#To get unique list of CD_GEOCODI including those without homicides we need to read in a different file
+CTs_with_total_count <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CTs_with_total_count.csv", col_types = cols(CD_GEOCODI = col_character(), ID = col_skip(), X1 = col_skip()))
+
+
+df$CD_GEOCODI <- unlist(lapply(unique(CTs_with_total_count$CD_GEOCODI), function(x) rep(x,170)))
+
+rm(CTs_with_total_count)
+
+df$Sex <- rep(rep(c(rep("M",5),rep("F",5)),3044), 17)
+df$AgeGroup <- rep(rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 3044), 17)
+df$YOD <- rep(unlist(lapply(2001:2017, function(x) rep(x,10))),3044)
+
+CTs_with_homs_by_age_sex_year <- left_join(df, CTs_with_homs_by_age_sex_year, by=c("CD_GEOCODI", "Sex", "AgeGroup", "YOD"))
+
+CTs_with_homs_by_age_sex_year$hom_count_age_sex_year[is.na(CTs_with_homs_by_age_sex_year$hom_count_age_sex_year)] <- 0
+
+rm(df)
+
+```
+
+Now I have to get expected counts. For this I have to get city-wide rates by age-sex-year strata
+
+Reading in stratified population data for whole city
+```{r}
+pop_city <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/Fortaleza_Age_Sex_Stratified_pop.csv")[,-1]
+pop_city$Sex <- c(rep("M",5),rep("F",5))
+pop_city$AgeGroup <- rep(c("0-14","15-24","25-44","45-64","65+"), 2)
+
+#We are going to collapse all data from the bairro file to create homicide counts for each age group and sex
+city_homs <- bairros_with_homs_by_age_sex %>% group_by(AgeGroup, Sex) %>% summarise(hom_count = sum(hom_count_age_sex))
+
+city_rates <- left_join(city_homs, pop_city, by=c("Sex", "AgeGroup"))
+city_rates$rate17yr <- city_rates$hom_count / city_rates$Pop
+city_rates$rate_per_yr <- city_rates$rate17yr/17
+```
+
+Now by applying these rates to census tract age and sex groups we can find expected count of homicides
+```{r}
+pop_ct <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/Fortaleza_by_CT_Age_Sex_Stratified_pop.csv", 
+    col_types = cols(Cod_setor = col_character()))[,-1]
+
+pop_ct$Sex <- rep(c(rep("M",5),rep("F",5)),3021)
+pop_ct$AgeGroup <- rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 3021)
+
+ct_expected_counts <- left_join(pop_ct, select(city_rates, Sex, AgeGroup, rate17yr, rate_per_yr), by=c("Sex", "AgeGroup"))
+
+```
+
+```{r}
+ct_expected_counts$exp_count_17yr <- ct_expected_counts$population * ct_expected_counts$rate17yr
+ct_expected_counts$exp_count_per_yr <- ct_expected_counts$population * ct_expected_counts$rate_per_yr
+colnames(ct_expected_counts)[1] <- "CD_GEOCODI"
+```
+
+Now to get actual number of homicides per census tract and create SMR in aggregate for all 17 years
+
+```{r}
+ct_SMR_17yr <- left_join(ct_expected_counts, CTs_with_homs_by_age_sex, by=c("Sex", "AgeGroup", "CD_GEOCODI"))
+colnames(ct_SMR_17yr)[10] <- "obs_count_age_sex"
+ct_SMR_17yr$obs_count_age_sex[is.na(ct_SMR_17yr$obs_count_age_sex)] <- 0
+ct_SMR_17yr$exp_count_17yr[is.na(ct_SMR_17yr$exp_count_17yr)] <- 0
+ct_SMR_17yr$population[is.na(ct_SMR_17yr$population)] <- 0
+
+ct_SMR_17yr <- ct_SMR_17yr %>% group_by(CD_GEOCODI) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_17yr), pop=sum(population))
+
+ct_SMR_17yr$SMR_17yr <- ct_SMR_17yr$obs_count / ct_SMR_17yr$exp_count
+ct_SMR_17yr$IR_17yr <- (ct_SMR_17yr$obs_count / (ct_SMR_17yr$pop*17)) * 100000
+```
+
+Now to get SMR for each year. Note that we do not create expected rates for each year specifically. We use mean from the entire period.
+
+```{r}
+ct_SMR_per_yr <- left_join(ct_expected_counts, CTs_with_homs_by_age_sex_year, by=c("Sex", "AgeGroup", "CD_GEOCODI"))
+
+colnames(ct_SMR_per_yr)[11] <- "obs_count_age_sex"
+
+ct_SMR_per_yr$obs_count_age_sex[is.na(ct_SMR_per_yr$obs_count_age_sex)] <- 0
+ct_SMR_per_yr$exp_count_per_yr[is.na(ct_SMR_per_yr$exp_count_per_yr)] <- 0
+ct_SMR_per_yr$population[is.na(ct_SMR_per_yr$population)] <- 0
+
+ct_SMR_per_yr <- ct_SMR_per_yr %>% group_by(CD_GEOCODI, YOD) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_per_yr), pop=sum(population))
+
+ct_SMR_per_yr$SMR_per_yr <- ct_SMR_per_yr$obs_count / ct_SMR_per_yr$exp_count
+ct_SMR_per_yr$IR_per_yr <- (ct_SMR_per_yr$obs_count / ct_SMR_per_yr$pop)*100000
+
+```
+
+Now I am going to do the same thing (generate aggregate and yearly SMR and IR) at the bairro level as well.
+
+##NOTHING UNDER THIS LINE HAS BEEN CHANGED FROM CT TO BAIRRO YET.
+
+```{r}
+#First going convert CT population to bairro population
+CTs_to_bairro <- distinct(select(homs, CD_GEOCODI, CD_GEOCODB))
+CTs_to_bairro <- CTs_to_bairro[complete.cases(CTs_to_bairro),]
+
+pop_bairro <- left_join(pop_ct, CTs_to_bairro, by=c("Cod_setor"="CD_GEOCODI")) %>% group_by(CD_GEOCODB, AgeGroup, Sex) %>% summarize(population=sum(population))
+pop_bairro[is.na(pop_bairro$population),]$population <- 0
+pop_bairro <- pop_bairro[complete.cases(pop_bairro),]
+
+bairro_expected_counts <- left_join(pop_bairro, select(city_rates, Sex, AgeGroup, rate17yr, rate_per_yr), by=c("Sex", "AgeGroup"))
+
+```
+
+```{r}
+bairro_expected_counts$exp_count_17yr <- bairro_expected_counts$population * bairro_expected_counts$rate17yr
+bairro_expected_counts$exp_count_per_yr <- bairro_expected_counts$population * bairro_expected_counts$rate_per_yr
+```
+
+Now to get actual number of homicides per bairro and create SMR in aggregate for all 17 years
+
+```{r}
+bairro_SMR_17yr <- left_join(bairro_expected_counts, bairros_with_homs_by_age_sex, by=c("Sex", "AgeGroup", "CD_GEOCODB"))
+colnames(bairro_SMR_17yr)[9] <- "obs_count_age_sex"
+bairro_SMR_17yr$obs_count_age_sex[is.na(bairro_SMR_17yr$obs_count_age_sex)] <- 0
+bairro_SMR_17yr$exp_count_17yr[is.na(bairro_SMR_17yr$exp_count_17yr)] <- 0
+bairro_SMR_17yr$population[is.na(bairro_SMR_17yr$population)] <- 0
+
+bairro_SMR_17yr <- bairro_SMR_17yr %>% group_by(CD_GEOCODB) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_17yr), pop=sum(population))
+
+bairro_SMR_17yr$SMR_17yr <- bairro_SMR_17yr$obs_count / bairro_SMR_17yr$exp_count
+bairro_SMR_17yr$IR_17yr <- (bairro_SMR_17yr$obs_count / (bairro_SMR_17yr$pop*17)) * 100000
+```
+
+Now to get SMR for each year. Note that we do not create expected rates for each year specifically. We use mean from the entire period.
+
+```{r}
+bairro_SMR_per_yr <- left_join(bairro_expected_counts, bairros_with_homs_by_age_sex_year, by=c("Sex", "AgeGroup", "CD_GEOCODB"))
+
+colnames(bairro_SMR_per_yr)[10] <- "obs_count_age_sex"
+
+bairro_SMR_per_yr$obs_count_age_sex[is.na(bairro_SMR_per_yr$obs_count_age_sex)] <- 0
+bairro_SMR_per_yr$exp_count_per_yr[is.na(bairro_SMR_per_yr$exp_count_per_yr)] <- 0
+bairro_SMR_per_yr$population[is.na(bairro_SMR_per_yr$population)] <- 0
+
+bairro_SMR_per_yr <- bairro_SMR_per_yr %>% group_by(CD_GEOCODB, YOD) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_per_yr), pop=sum(population))
+
+bairro_SMR_per_yr$SMR_per_yr <- bairro_SMR_per_yr$obs_count / bairro_SMR_per_yr$exp_count
+bairro_SMR_per_yr$IR_per_yr <- (bairro_SMR_per_yr$obs_count / bairro_SMR_per_yr$pop)*100000
+
+```
+
+Now I am going to write all the files.
+
+```{r}
+write_csv(bairro_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_17yr-agg.csv")
+write_csv(bairro_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_yr.csv")
+write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_17yr-agg.csv")
+write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_17yr-agg.csv")
+
+```
+
+
+
+
