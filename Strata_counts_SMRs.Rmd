@@ -289,7 +289,7 @@ Now I am going to write all the files.
 write_csv(bairro_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_17yr-agg.csv")
 write_csv(bairro_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_yr.csv")
 write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_17yr-agg.csv")
-write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_17yr-agg.csv")
+write_csv(ct_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_yr-agg.csv")
 
 ```
 
