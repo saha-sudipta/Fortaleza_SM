@@ -283,6 +283,152 @@ bairro_SMR_per_yr$IR_per_yr <- (bairro_SMR_per_yr$obs_count / bairro_SMR_per_yr$
 
 ```
 
+
+For Bairros by Months
+
+```{r}
+homs$MOD <- substr(homs$DOD, 6,7)
+homs$Counter <- (as.integer(homs$YOD)-2001)*12 + as.integer(homs$MOD)
+
+
+
+#Keep only relevant columns
+bairros_with_homs_by_age_sex_mnth <- select(homs, Age, AgeGroup, Sex, CD_GEOCODB, Counter, YOD, MOD)
+
+#Remove those without sex, age or info
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth[!is.na(bairros_with_homs_by_age_sex_mnth$AgeGroup),]
+
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth[!is.na(bairros_with_homs_by_age_sex_mnth$Sex),]
+
+#Group and count by age sex and bairro code
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth %>% group_by(CD_GEOCODB, AgeGroup, Sex, Counter) %>% summarise(hom_count_age_sex_mnth = n(), YOD = mean(as.integer(YOD)), MOD=mean(as.integer(MOD)))
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=242760))
+df$Sex <- rep(rep(rep(c(rep("M",5),rep("F",5)), 119), 12), 17)
+df$AgeGroup <- rep(rep(rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 119), 12), 17)
+df$Counter <- rep(unlist(lapply(1:204, function(x) rep(x,10))),119)
+df$CD_GEOCODB <- unlist(lapply(unique(bairros_with_homs_by_age_sex_mnth$CD_GEOCODB[!is.na(bairros_with_homs_by_age_sex_mnth$CD_GEOCODB)]), function(x) rep(x,2040)))
+
+
+bairros_with_homs_by_age_sex_mnth <- left_join(df, bairros_with_homs_by_age_sex_mnth, by=c("CD_GEOCODB", "Sex", "AgeGroup", "Counter"))
+
+bairros_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth[is.na(bairros_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth)] <- 0
+
+rm(df)
+
+```
+
+```{r}
+
+bairro_SMR_per_mnth <- left_join(bairro_expected_counts, bairros_with_homs_by_age_sex_mnth, by=c("Sex", "AgeGroup", "CD_GEOCODB"))
+colnames(bairro_SMR_per_mnth)[10] <- "obs_count_age_sex"
+
+bairro_SMR_per_mnth$exp_count_per_mnth <- bairro_SMR_per_mnth$exp_count_per_yr / 12
+
+bairro_SMR_per_mnth$obs_count_age_sex[is.na(bairro_SMR_per_mnth$obs_count_age_sex)] <- 0
+bairro_SMR_per_mnth$exp_count_per_mnth[is.na(bairro_SMR_per_mnth$exp_count_per_mnth)] <- 0
+bairro_SMR_per_mnth$population[is.na(bairro_SMR_per_mnth$population)] <- 0
+
+bairro_SMR_per_mnth <- bairro_SMR_per_mnth %>% group_by(CD_GEOCODB, Counter) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_per_mnth), pop=sum(population))
+
+bairro_SMR_per_mnth$SMR_per_mnth <- bairro_SMR_per_mnth$obs_count / bairro_SMR_per_mnth$exp_count
+bairro_SMR_per_mnth$IR_per_mnth <- (bairro_SMR_per_mnth$obs_count / bairro_SMR_per_mnth$pop)*100000
+
+rm(df)
+
+```
+
+
+```{r}
+homs$MOD <- substr(homs$DOD, 6,7)
+homs$Counter <- (as.integer(homs$YOD)-2001)*12 + as.integer(homs$MOD)
+
+
+
+#Keep only relevant columns
+bairros_with_homs_by_age_sex_mnth <- select(homs, Age, AgeGroup, Sex, CD_GEOCODB, Counter, YOD, MOD)
+
+#Remove those without sex, age or info
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth[!is.na(bairros_with_homs_by_age_sex_mnth$AgeGroup),]
+
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth[!is.na(bairros_with_homs_by_age_sex_mnth$Sex),]
+
+#Group and count by age sex and bairro code
+bairros_with_homs_by_age_sex_mnth <- bairros_with_homs_by_age_sex_mnth %>% group_by(CD_GEOCODB, AgeGroup, Sex, Counter) %>% summarise(hom_count_age_sex_mnth = n(), YOD = mean(as.integer(YOD)), MOD=mean(as.integer(MOD)))
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=242760))
+df$Sex <- rep(rep(rep(c(rep("M",5),rep("F",5)), 119), 12), 17)
+df$AgeGroup <- rep(rep(rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 119), 12), 17)
+df$Counter <- rep(unlist(lapply(1:204, function(x) rep(x,10))),119)
+df$CD_GEOCODB <- unlist(lapply(unique(bairros_with_homs_by_age_sex_mnth$CD_GEOCODB[!is.na(bairros_with_homs_by_age_sex_mnth$CD_GEOCODB)]), function(x) rep(x,2040)))
+
+
+bairros_with_homs_by_age_sex_mnth <- left_join(df, bairros_with_homs_by_age_sex_mnth, by=c("CD_GEOCODB", "Sex", "AgeGroup", "Counter"))
+
+bairros_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth[is.na(bairros_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth)] <- 0
+
+rm(df)
+
+```
+
+For CTs per month
+
+```{r}
+
+#Keep only relevant columns
+CTs_with_homs_by_age_sex_mnth <- select(homs, Age, AgeGroup, Sex, CD_GEOCODI, Counter, YOD, MOD)
+
+#Remove those without sex, age or info
+CTs_with_homs_by_age_sex_mnth <- CTs_with_homs_by_age_sex_mnth[!is.na(CTs_with_homs_by_age_sex_mnth$AgeGroup),]
+
+CTs_with_homs_by_age_sex_mnth <- CTs_with_homs_by_age_sex_mnth[!is.na(CTs_with_homs_by_age_sex_mnth$Sex),]
+
+#Group and count by age sex and bairro code
+CTs_with_homs_by_age_sex_mnth <- CTs_with_homs_by_age_sex_mnth %>% group_by(CD_GEOCODI, AgeGroup, Sex, Counter) %>% summarise(hom_count_age_sex_mnth = n(), YOD = mean(as.integer(YOD)), MOD=mean(as.integer(MOD)))
+
+#Now going to create a mock df with all strata. In the previous line strata without observations are missing. After merging, will give these zero count.
+df <- as.data.frame(matrix(ncol=0,nrow=6209760))
+df$Sex <- rep(rep(rep(c(rep("M",5),rep("F",5)), 3044), 12), 17)
+df$AgeGroup <- rep(rep(rep(rep(c("0-14","15-24","25-44","45-64","65+"), 2), 3044), 12), 17)
+df$Counter <- rep(unlist(lapply(1:204, function(x) rep(x,10))),3044)
+
+CTs_with_total_count <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CTs_with_total_count.csv", col_types = cols(CD_GEOCODI = col_character(), ID = col_skip(), X1 = col_skip()))
+
+
+df$CD_GEOCODI <- unlist(lapply(unique(CTs_with_total_count$CD_GEOCODI), function(x) rep(x,2040)))
+
+rm(CTs_with_total_count)
+
+CTs_with_homs_by_age_sex_mnth <- left_join(df, CTs_with_homs_by_age_sex_mnth, by=c("CD_GEOCODI", "Sex", "AgeGroup", "Counter"))
+
+CTs_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth[is.na(CTs_with_homs_by_age_sex_mnth$hom_count_age_sex_mnth)] <- 0
+
+rm(df)
+
+```
+
+```{r}
+
+ct_SMR_per_mnth <- left_join(ct_expected_counts, CTs_with_homs_by_age_sex_mnth, by=c("Sex", "AgeGroup", "CD_GEOCODI"))
+colnames(ct_SMR_per_mnth)[11] <- "obs_count_age_sex"
+
+ct_SMR_per_mnth$exp_count_per_mnth <- ct_SMR_per_mnth$exp_count_per_yr / 12
+
+ct_SMR_per_mnth$obs_count_age_sex[is.na(ct_SMR_per_mnth$obs_count_age_sex)] <- 0
+ct_SMR_per_mnth$exp_count_per_mnth[is.na(ct_SMR_per_mnth$exp_count_per_mnth)] <- 0
+ct_SMR_per_mnth$population[is.na(ct_SMR_per_mnth$population)] <- 0
+
+ct_SMR_per_mnth <- ct_SMR_per_mnth %>% group_by(CD_GEOCODI, Counter) %>% summarise(obs_count = sum(obs_count_age_sex), exp_count = sum(exp_count_per_mnth), pop=sum(population))
+
+ct_SMR_per_mnth$SMR_per_mnth <- ct_SMR_per_mnth$obs_count / ct_SMR_per_mnth$exp_count
+ct_SMR_per_mnth$IR_per_mnth <- (ct_SMR_per_mnth$obs_count / ct_SMR_per_mnth$pop)*100000
+
+rm(df)
+
+```
+
 Now I am going to write all the files.
 
 ```{r}
@@ -290,6 +436,8 @@ write_csv(bairro_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit
 write_csv(bairro_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_yr.csv")
 write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_17yr-agg.csv")
 write_csv(ct_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_yr-agg.csv")
+write_csv(bairro_SMR_per_mnth, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_mnth.csv")
+write_csv(ct_SMR_per_mnth, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_mnth.csv")
 
 ```
 
