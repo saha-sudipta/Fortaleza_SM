@@ -7,7 +7,7 @@ First read in Census tract shapefile. This will contain all the base information
 
 ```{r}
 library(rgdal)
-census_tracts_CE <- readOGR("./CE_setores_censitarios_shape/", "23SEE250GC_SIR", use_iconv = TRUE, encoding = "latin1")
+census_tracts_CE <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/CE_setores_censitarios_shape/", "23SEE250GC_SIR", use_iconv = TRUE, encoding = "latin1")
 ```
 
 Load correction table and extract datatable from shapefile and filter to keep only Fortaleza CTs, apply correction and then filter again to keep Fortaleza municipality
@@ -106,7 +106,7 @@ census_data <- left_join(census_data, (((census_data %>% group_by(CD_GEOCODB) %>
 ```
 
 ```{r}
-write_csv(census_data, "cust_census_pop_fortaleza.csv")
+write_csv(census_data, "cust_census_pop_fortaleza_01_03_2019.csv")
 ```
 
 
@@ -157,6 +157,11 @@ Rename some columns in the census data
 
 ```{r}
 colnames(DomicilioRenda)[4] <- "Total_HH_inc_in_CT"
+colnames(DomicilioRenda)[7] <- "HH_less_8th_SM"
+colnames(DomicilioRenda)[8] <- "HH_8thto4th_SM"
+colnames(DomicilioRenda)[14] <- "HH_5xto10x_SM"
+colnames(DomicilioRenda)[15] <- "HH_grt10x_SM"
+colnames(DomicilioRenda)[16] <- "HH_noinc_SM"
 colnames(Pessoa01)[3] <- "Lit_grtr_5yrs"
 ##PPH = Permanent Private Household
 colnames(Domicilio01)[3] <- "Total_no_HH_in_CT"
@@ -174,7 +179,7 @@ colnames(Pessoa03)[8] <- "Total_pop_indigena"
 
 Create new file with census necessary census data:
 ```{r}
-census_covar_data <- dplyr::select(DomicilioRenda, Cod_setor, Total_HH_inc_in_CT)
+census_covar_data <- dplyr::select(DomicilioRenda, Cod_setor, Total_HH_inc_in_CT, HH_less_8th_SM, HH_8thto4th_SM, HH_5xto10x_SM, HH_grt10x_SM, HH_noinc_SM)
 census_covar_data <- left_join(census_covar_data, dplyr::select(Pessoa01, Cod_setor, Lit_grtr_5yrs), by="Cod_setor")
 census_covar_data <- left_join(census_covar_data, dplyr::select(Domicilio01, Cod_setor, Total_no_HH_in_CT, PPH_Wtr_Spply_Ntwrk, PPH_Sewerage_Conn, PPH_Garbage_Col_Serv, PPH_Elec), by="Cod_setor")
 census_covar_data <- left_join(census_covar_data, dplyr::select(Pessoa03, Cod_setor, Total_pop_branca, Total_pop_preta, Total_pop_amarela, Total_pop_parda, Total_pop_indigena), by="Cod_setor")
@@ -194,10 +199,13 @@ census_covar_data$Perc_preta <- census_covar_data$Total_pop_preta / census_covar
 census_covar_data$Perc_amarela <- census_covar_data$Total_pop_amarela / census_covar_data$Total_pop
 census_covar_data$Perc_parda <- census_covar_data$Total_pop_parda / census_covar_data$Total_pop
 census_covar_data$Perc_indigena <- census_covar_data$Total_pop_indigena / census_covar_data$Total_pop
+census_covar_data$ICE_priv <- census_covar_data$HH_5xto10x_SM + census_covar_data$HH_grt10x_SM
+census_covar_data$ICE_depriv <- census_covar_data$HH_noinc_SM + census_covar_data$HH_8thto4th_SM + census_covar_data$HH_less_8th_SM
+census_covar_data$ICE <- (census_covar_data$ICE_priv - census_covar_data$ICE_depriv)/census_covar_data$Total_no_HH_in_CT
 ```
 
 ```{r}
-write_csv(census_covar_data, "census_covariates_Fortaleza.csv")
+write_csv(census_covar_data, "census_covariates_Fortaleza_01_03_19.csv")
 ```
 
 
