@@ -1,0 +1,285 @@
+---
+title: "Descriptive Maps"
+output: html_notebook
+---
+
+Function
+```{r}
+plot_fort_maps2 <- function(data, fill_str, legend_title, plot_title, size=0.1){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+    geom_polygon(                                          # make a polygon
+      data = data,                                    # data frame
+      aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+                 fill = fill_str),
+      size=size, color="black") +                # variable to use for filling
+    scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                      drop = FALSE) + # fill with brewer colors   # add title
+    theme(line = element_blank(),
+          axis.text=element_blank(),      # .. tickmarks..
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin = unit(c(0, 0, 0, 0), "cm"),
+          #legend.text=element_text(size=15),
+          #legend.title=element_text(size=17), # .. axis labels..
+          panel.background = element_blank(), plot.title = element_text(size=5)) + ggtitle(plot_title)
+}
+
+
+
+shape_to_ggplot <- function(shape){
+  require(broom)
+  gg_data <- tidy(shape)
+  data <- slot(shape, "data")
+  shape[["polyID"]] <- sapply(slot(shape, "polygons"), function(x) slot(x, "ID"))
+  gg_data <- merge(gg_data, shape, by.x="id", by.y="polyID")
+  return(gg_data)
+}
+grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, position = c("bottom", "right")) {
+
+  plots <- list(...)
+  position <- match.arg(position)
+  g <- ggplotGrob(plots[[1]] + theme(legend.position = position))$grobs
+  legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+  lheight <- sum(legend$height)
+  lwidth <- sum(legend$width)
+  gl <- lapply(plots, function(x) x + theme(legend.position="none"))
+  gl <- c(gl, ncol = ncol, nrow = nrow)
+
+  combined <- switch(position,
+                     "bottom" = arrangeGrob(do.call(arrangeGrob, gl),
+                                            legend,
+                                            ncol = 1,
+                                            heights = unit.c(unit(1, "npc") - lheight, lheight)),
+                     "right" = arrangeGrob(do.call(arrangeGrob, gl),
+                                           legend,
+                                           ncol = 2,
+                                           widths = unit.c(unit(1, "npc") - lwidth, lwidth)))
+
+  grid.newpage()
+  grid.draw(combined)
+
+  # return gtable invisibly
+  invisible(combined)
+
+}
+```
+
+###Bairro Level Plots
+
+```{r}
+bairro_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles/Shapefiles/Bairro/", "Bairros_from_CTs")
+```
+
+```{r}
+bairro_homs <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_yr.csv", 
+    col_types = cols(CD_GEOCODB = col_character()))
+```
+```{r}
+bairro_shp_gg <- shape_to_ggplot(bairro_shp)
+```
+
+Aggregated plot of counts
+
+```{r}
+bairro_agg_homs <- bairro_homs %>% group_by(CD_GEOCODB) %>% summarize(obs_count=sum(obs_count), SMR=mean(SMR_per_yr), IR=mean(IR_per_yr))
+```
+
+```{r}
+breaks <- quantile(bairro_agg_homs$obs_count, probs=c(seq(0,1,0.15),1))
+bairro_shp_gg_count_agg <- bairro_shp_gg[,-1] %>% left_join(bairro_agg_homs[,c(1,2)], by=c("cod_ibge"="CD_GEOCODB")) %>% mutate(cut=cut(obs_count, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(bairro_shp_gg_count_agg, "cut","Homicide counts", "Aggregate counts for 2001-17 by bairro") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+Aggregated plot of SMRs
+
+```{r}
+breaks <- quantile(bairro_agg_homs$SMR, probs=c(seq(0,1,0.15),1))
+bairro_shp_gg_count_agg <- bairro_shp_gg[,-1] %>% left_join(bairro_agg_homs[,c(1,3)], by=c("cod_ibge"="CD_GEOCODB")) %>% mutate(cut=cut(SMR, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(bairro_shp_gg_count_agg, "cut","Homicide counts", "Aggregate SMR for 2001-17 by bairro") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+Aggregated plot of IRs
+
+```{r}
+breaks <- quantile(bairro_agg_homs$IR, probs=c(seq(0,1,0.15),1))
+bairro_shp_gg_count_agg <- bairro_shp_gg[,-1] %>% left_join(bairro_agg_homs[,c(1,4)], by=c("cod_ibge"="CD_GEOCODB")) %>% mutate(cut=cut(IR, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(bairro_shp_gg_count_agg, "cut","Homicide counts", "Aggregate IR for 2001-17 by bairro") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+
+Count plots by year
+```{r}
+breaks <- quantile(bairro_homs$obs_count, probs=c(seq(0,1,0.15),1))
+
+bairro_shp_gg_count <- bairro_shp_gg[,-1] %>% left_join(spread(bairro_homs[,c(1:3)], YOD, obs_count), by=c("cod_ibge"="CD_GEOCODB")) %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+count_plots <- sapply(2001:2017, function(x) plot_fort_maps2(bairro_shp_gg_count, paste0("`",x,"_cut`"), paste0("Homicide count for ",x), as.character(x)), simplify = FALSE)
+```
+
+
+```{r}
+library(gridExtra)
+library(grid)
+library(ggpubr)
+library(cowplot)
+plot <- count_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide Count"))
+mylegend <- g_legend(plot)
+grid_count <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08) 
+```
+
+
+IR plots by years
+
+```{r}
+breaks <- quantile(bairro_homs$IR_per_yr, probs=c(seq(0,1,0.15),1), na.rm=TRUE)
+
+bairro_shp_gg_IR <- bairro_shp_gg[,-1] %>% left_join(spread(bairro_homs[,c(1,2,7)], YOD, IR_per_yr), by=c("cod_ibge"="CD_GEOCODB")) %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+IR_plots <- sapply(2001:2017, function(x) plot_fort_maps2(bairro_shp_gg_IR, paste0("`",x,"_cut`"), paste0("IR for ",x), as.character(x)), simplify = FALSE)
+
+plot <- IR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide IR"))
+mylegend <- g_legend(plot)
+grid_IR <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08)
+```
+
+
+SMR plots by years
+```{r}
+breaks <- quantile(bairro_homs$SMR_per_yr, probs=c(seq(0,1,0.15),1), na.rm=TRUE)
+
+bairro_shp_gg_SMR <- bairro_shp_gg[,-1] %>% left_join(spread(bairro_homs[,c(1,2,6)], YOD, SMR_per_yr), by=c("cod_ibge"="CD_GEOCODB")) %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+SMR_plots <- sapply(2001:2017, function(x) plot_fort_maps2(bairro_shp_gg_SMR, paste0("`",x,"_cut`"), paste0("IR for ",x), as.character(x)), simplify = FALSE)
+
+plot <- SMR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide IR"))
+mylegend <- g_legend(plot)
+grid_SMR <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08)
+```
+
+
+### CT level plots
+
+
+
+```{r}
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles/Shapefiles/CTs/", "Corrected_CTs")
+```
+
+```{r}
+CT_homs <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_yr-agg.csv", 
+    col_types = cols(CD_GEOCODI = col_character()))
+```
+```{r}
+CT_shp_gg <- shape_to_ggplot(CT_shp)
+```
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero.
+
+```{r}
+CT_homs <- CT_homs %>% mutate(SMR_per_yr=replace(SMR_per_yr, SMR_per_yr==Inf | is.nan(SMR_per_yr), 0), IR_per_yr=replace(IR_per_yr, IR_per_yr==Inf | is.nan(IR_per_yr), 0)) %>% as.data.frame()
+```
+
+
+Aggregated plot of counts
+
+```{r}
+CT_agg_homs <- CT_homs %>% group_by(CD_GEOCODI) %>% summarize(obs_count=sum(obs_count), SMR=mean(SMR_per_yr), IR=mean(IR_per_yr))
+```
+
+```{r}
+breaks <- quantile(CT_agg_homs$obs_count, probs=c(seq(0,1,0.15),1))
+CT_shp_gg_count_agg <- CT_shp_gg[,-1] %>% left_join(CT_agg_homs[,c(1,2)], by="CD_GEOCODI") %>% mutate(cut=cut(obs_count, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(CT_shp_gg_count_agg, "cut","Homicide counts", "Aggregate counts for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+Aggregated plot of SMRs
+
+```{r}
+breaks <- quantile(CT_agg_homs$SMR, probs=c(seq(0,1,0.15),1))
+CT_shp_gg_count_agg <- CT_shp_gg[,-1] %>% left_join(CT_agg_homs[,c(1,3)], by="CD_GEOCODI") %>% mutate(cut=cut(SMR, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(CT_shp_gg_count_agg, "cut","Homicide counts", "Aggregate SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+Aggregated plot of IRs
+
+```{r}
+breaks <- quantile(CT_agg_homs$IR, probs=c(seq(0,1,0.15),1))
+CT_shp_gg_count_agg <- CT_shp_gg[,-1] %>% left_join(CT_agg_homs[,c(1,4)], by="CD_GEOCODI") %>% mutate(cut=cut(IR, breaks=breaks, include.lowest=TRUE))
+plot_fort_maps2(CT_shp_gg_count_agg, "cut","Homicide counts", "Aggregate IR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+
+Count plots by year
+```{r}
+breaks <- c(0,1,2,3,4,10,35)
+
+CT_shp_gg_count <- CT_shp_gg[,-1] %>% left_join(spread(CT_homs[,c(1:3)], YOD, obs_count), by="CD_GEOCODI") %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+count_plots <- sapply(2001:2017, function(x) plot_fort_maps2(CT_shp_gg_count, paste0("`",x,"_cut`"), paste0("Homicide count for ",x), as.character(x), size=0.05), simplify = FALSE)
+```
+
+
+```{r}
+library(gridExtra)
+library(grid)
+library(ggpubr)
+library(cowplot)
+plot <- count_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide Count"))
+mylegend <- g_legend(plot)
+grid_count <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08) 
+```
+
+```{r}
+grid_count
+```
+
+
+IR plots by years
+
+```{r}
+breaks <- c(0,5,10,15,50,100,200,15000)
+
+CT_shp_gg_IR <- CT_shp_gg[,-1] %>% left_join(spread(CT_homs[,c(1,2,7)], YOD, IR_per_yr), by="CD_GEOCODI") %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, labels=(c("[0,5]","(5,10]","(10,15]","(15,50]","(50,100]","(100,200]",">200")), include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+IR_plots <- sapply(2001:2017, function(x) plot_fort_maps2(CT_shp_gg_IR, paste0("`",x,"_cut`"), paste0("IR for ",x), as.character(x)), simplify = FALSE)
+
+plot <- IR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide IR"))
+mylegend <- g_legend(plot)
+grid_IR <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08)
+```
+
+```{r}
+grid_IR
+```
+
+SMR plots by years
+```{r}
+breaks <- c(0,1,2,5,10,15,50,400)
+
+CT_shp_gg_SMR <- CT_shp_gg[,-1] %>% left_join(spread(CT_homs[,c(1,2,6)], YOD, SMR_per_yr), by="CD_GEOCODI") %>% mutate_at(.funs = funs(cut = cut(., breaks=breaks, labels=(c("[0,1]","(1,2]","(2,5]","(5,10]","(10,15]","(15,50]",">50")), include.lowest=TRUE)), .vars = vars(`2001`:`2017`))
+```
+
+```{r}
+SMR_plots <- sapply(2001:2017, function(x) plot_fort_maps2(CT_shp_gg_SMR, paste0("`",x,"_cut`"), paste0("IR for ",x), as.character(x)), simplify = FALSE)
+
+plot <- SMR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide IR"))
+mylegend <- g_legend(plot)
+grid_SMR <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08)
+```
+
+```{r}
+grid_SMR
+```
+
