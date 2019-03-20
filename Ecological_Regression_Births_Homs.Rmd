@@ -1,0 +1,101 @@
+---
+title: "Ecological Regression of Birth Data"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(reshape2)
+library(ggplot2)
+```
+
+
+```{r}
+births <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Ecological_Birth_Data.csv")
+colnames(births)[1] <- "Bairro"
+births$Bairro[3] <- "JOSE DE ALENCAR"
+homs <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/homs_wth_bairro_CT_df.csv")
+census_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/Fortaleza_by_CT_Age_Sex_Stratified_pop.csv", col_types = cols(Cod_setor = col_character()))
+homs$CD_GEOCODI <- as.character(homs$CD_GEOCODI)
+```
+
+```{r}
+homs_bairro_yr <- homs %>% group_by(YOD, Bairro) %>% summarize(count=n())
+census_data <- census_data %>% group_by(Cod_setor) %>% summarize(pop=sum(population)) %>% left_join(select(homs, CD_GEOCODI, Bairro), by=c("Cod_setor"="CD_GEOCODI")) %>% group_by(Bairro) %>% summarize(pop=sum(pop, na.rm = TRUE))
+
+homs_bairro_yr <- left_join(homs_bairro_yr, census_data, by="Bairro")
+homs_bairro_yr <- homs_bairro_yr[complete.cases(homs_bairro_yr),]
+
+```
+
+
+
+```{r}
+births$Bairro[26] <- "CIDADE DOS FUNCIONARIOS"
+births$Bairro[30] <- "CONJUNTO CEARA I"
+births$Bairro[49] <- "GENIBAU"
+births$Bairro[66] <- "JOCKEY CLUBE"
+births$Bairro[4] <- "SAO GERARDO/ALAGADICO"
+births$Bairro[114] <- "VILA PERY"
+births$Bairro[108] <- "SAPIRANGA COITE"
+births$Bairro[102] <-"PRESIDENTE KENNEDY"
+births$Bairro[81] <- "PLANALTO AYRTON SENNA"
+births$Bairro[88] <-"PARQUE PRESIDENTE VARGAS"
+births$Bairro[43] <-"MANUEL DIAS BRANCO"
+births$Bairro[33] <- "PALMEIRAS"
+
+births_long <- gather(births, variable, value, NVBP2009:NVATER2018, factor_key=TRUE)
+
+births_long$perc <- as.numeric(substr(births_long$value,1,nchar(births_long$value)-1))
+births_long$variable <- as.character(births_long$variable)
+births_long$var_name <- substr(births_long$variable,1,nchar(births_long$variable)-4)
+births_long$year <- as.integer(substr(births_long$variable,nchar(births_long$variable)-3,nchar(births_long$variable)))
+
+births_long_wide <- select(births_long, Bairro, year, var_name, perc)
+
+births_long_wide <- spread(births_long_wide, var_name, perc)
+
+colnames(homs_bairro_yr)[1] <- "YOD"
+homs_bairro_yr <- ungroup(homs_bairro_yr)
+colnames(homs_bairro_yr)[1] <- "year"
+
+
+regression_df <- left_join(births_long_wide, homs_bairro_yr, by=c("Bairro", "year"))
+
+regression_df <- regression_df[regression_df$year > 2008,]
+regression_df <- regression_df[regression_df$year < 2018,]
+
+regression_df <- regression_df[regression_df$Bairro != "CASTELAO",]
+regression_df <- regression_df[regression_df$Bairro != "MATA GALINHA",]
+
+for (i in 1:nrow(regression_df)){
+  if (is.na(regression_df$count[i])){
+    bairro <- regression_df$Bairro[i]
+    pop <- regression_df[regression_df$Bairro==bairro,]$pop
+    pop_val <- unique(pop[complete.cases(pop)])
+    regression_df$pop[i] <- pop_val
+    regression_df$count[i] <- 0
+  }
+}
+
+regression_df$hom_rate <- (regression_df$count / regression_df$pop) * 1000000
+
+
+```
+
+
+```{r}
+ggplot(regression_df) + geom_point(aes(x=year, y=hom_rate), color="red") + geom_point(aes(x=year, y=NVBP), color="blue")
+
+ggplot(regression_df) + geom_smooth(aes(x=year, y=hom_rate), method = "loess")
+ggplot(regression_df) + geom_smooth(aes(x=year, y=NVBP), method = "loess")
+ggplot(regression_df) + geom_smooth(aes(x=count, y=NVBP), method = "loess")
+```
+
+```{r}
+
+```
+
+

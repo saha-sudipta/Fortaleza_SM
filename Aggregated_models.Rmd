@@ -1,0 +1,314 @@
+---
+title: "Aggregated Models"
+output: html_notebook
+---
+
+These models are for homicide data aggregated from 2001 - 2017
+
+```{r}
+library(INLA)
+library(dplyr)
+library(readr)
+library(stringi)
+library(rgdal)
+library(spdep)
+```
+```{r}
+plot_fort_maps2 <- function(data, fill_str, legend_title, plot_title, size=0.1){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+    geom_polygon(                                          # make a polygon
+      data = data,                                    # data frame
+      aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+                 fill = fill_str),
+      size=size, color="black") +                # variable to use for filling
+    scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                      drop = FALSE) + # fill with brewer colors   # add title
+    theme(line = element_blank(),
+          axis.text=element_blank(),      # .. tickmarks..
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin = unit(c(0, 0, 0, 0), "cm"),
+          #legend.text=element_text(size=15),
+          #legend.title=element_text(size=17), # .. axis labels..
+          panel.background = element_blank(), plot.title = element_text(size=5)) + ggtitle(plot_title)
+}
+
+
+
+shape_to_ggplot <- function(shape){
+  require(broom)
+  gg_data <- tidy(shape)
+  data <- slot(shape, "data")
+  shape[["polyID"]] <- sapply(slot(shape, "polygons"), function(x) slot(x, "ID"))
+  gg_data <- merge(gg_data, shape, by.x="id", by.y="polyID")
+  return(gg_data)
+}
+```
+
+```{r}
+SMR_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_per_mnth_MISSING_ADJ.csv",
+    col_types = cols(CD_GEOCODI = col_character()))
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles/Shapefiles/CTs/", "Corrected_CTs", use_iconv = TRUE, encoding = "latin1")
+CT_shp_gg <- shape_to_ggplot(CT_shp)
+```
+
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero.
+
+```{r}
+SMR_data <- SMR_data  %>%
+  group_by(CD_GEOCODI) %>%
+  summarize(y=sum(y), E=sum(E)) %>% 
+  mutate(SMR=y/E) %>% 
+  mutate(SMR=replace(SMR, SMR==Inf | is.nan(SMR), 0)) %>% as.data.frame() %>% rename(obs_count=y, exp_count=E)
+
+library(epitools)
+SMR_data$SMR_var <- SMR_data$obs_count / (SMR_data$exp_count)^2
+SMR_data$CI95_lower <- NA
+SMR_data$CI95_upper <- NA
+SMR_data[,c("CI95_lower", "CI95_upper")] <- pois.exact(x=SMR_data$obs_count, pt=SMR_data$exp_count, conf.level=0.95)[,c(4,5)]
+```
+
+```{r}
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+CT_shp@data <- arrange(CT_shp@data, CD_GEOCODI)
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+```
+
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero. Also turning counts to zero if underlying population is zero
+
+```{r}
+BYM_data <- SMR_data %>% rename(y=obs_count, E=exp_count) %>% right_join(CT_shp@data, by="CD_GEOCODI") %>% mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0)) %>% dplyr::select(CD_GEOCODI, y, E) %>% arrange(CD_GEOCODI) %>% mutate(bymID=1:3044)
+
+```
+
+
+```{r}
+
+formula_poisson_null <- y ~ 1 + f(bymID, model="iid")
+
+model_poisson_null <- inla(formula_poisson_null, family="poisson", data=BYM_data, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+```
+
+Plot smoothed and unsmoothed rates
+
+```{r}
+breaks <- c(0,0.1,0.25,0.5,0.75,1,1.5,2.5,3,5,202)
+
+CT_shp_gg_SMR <- CT_shp_gg[,-1] %>% left_join(SMR_data[,c(1,4)], by="CD_GEOCODI") %>% mutate(cut=cut(SMR, breaks=breaks, labels=(c("[0,0.1]","(0.1,0.25]","(0.25,0.5]","(0.5,0.75]","(0.75,1]","(1,1.5]","(1.5,2.5]","(2.5,3]","(3,5]", ">5")), include.lowest=TRUE))
+
+
+plot_fort_maps2(CT_shp_gg_SMR, "cut","Unsmoothed SMR", "Aggregate SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+
+```
+
+```{r}
+library(RColorBrewer)
+set.seed(2014)
+plot(1,1, type="n", xlim=c(500,650), ylim=c(0,10),
+  main= "Confidence intervals of the SMR",
+  xlab="County", ylab="Relative Risk", xaxt="n")
+
+abline(h=1, lty=2)
+for(i in 500:650){
+  if(!is.na(SMR_data$exp_count[i])){
+        if(SMR_data$CI95_lower[i]>1 ) {
+            sig.col <- brewer.pal(4, "Reds")[4]
+            col <- sig.col
+            lty <- 2
+            #text(i, SMR_data$CI95_upper[i]+.31,
+                #srt=90, col=sig.col, cex=.85)
+        } else {
+            col <- "black"
+            lty <- 1
+        }
+        lines(c(i,i), c(SMR_data$CI95_lower[i],SMR_data$CI95_upper[i]), col=col, lty=lty)
+        points(x=i, y=SMR_data$SMR_17yr[i], pch=18, col=col)
+  }
+}
+```
+
+
+```{r}
+breaks <- c(0,0.1,0.25,0.5,0.75,1,1.5,2.5,3,5,202)
+
+results <- data.frame(bymID=BYM_data$bymID, CD_GEOCODI=BYM_data$CD_GEOCODI, fit_SMR = model_poisson_null$summary.fitted.values$mean)
+
+CT_shp_gg_SMR_smth <- CT_shp_gg_SMR %>% left_join(results, by="CD_GEOCODI") %>% mutate(fit_cut=cut(fit_SMR, breaks=breaks, labels=(c("[0,0.1]","(0.1,0.25]","(0.25,0.5]","(0.5,0.75]","(0.75,1]","(1,1.5]","(1.5,2.5]","(2.5,3]","(3,5]", ">5")), include.lowest=TRUE))
+
+plot_fort_maps2(CT_shp_gg_SMR_smth, "fit_cut","Fitted SMR", "Aggregate Poisson smoothed SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+```{r}
+formula_bym_null <- y ~ f(bymID, model="bym", graph=CT_adj)
+
+model_bym_null <- inla(formula_bym_null, family="poisson", data=BYM_data, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+```
+
+
+```{r}
+breaks <- c(0,0.1,0.25,0.5,0.75,1,1.5,2.5,3,5,202)
+
+results2 <- data.frame(bymID=BYM_data$bymID, CD_GEOCODI=BYM_data$CD_GEOCODI, fit_SMR = model_bym_null$summary.fitted.values$mean, CI95_lower = model_bym_null$summary.fitted.values$`0.025quant`, CI95_upper=model_bym_null$summary.fitted.values$`0.975quant`)
+
+CT_shp_gg_SMR_smth <- CT_shp_gg_SMR %>% left_join(results2, by=c("CD_GEOCODI")) %>% mutate(fit_cut=cut(fit_SMR, breaks=breaks, labels=(c("[0,0.1]","(0.1,0.25]","(0.25,0.5]","(0.5,0.75]","(0.75,1]","(1,1.5]","(1.5,2.5]","(2.5,3]","(3,5]", ">5")), include.lowest=TRUE))
+
+plot_fort_maps2(CT_shp_gg_SMR_smth, "fit_cut","BYM smoothed SMR", "Aggregate BYM smoothed SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+
+```{r}
+set.seed(2014)
+plot(1,1, type="n", xlim=c(550,650), ylim=c(0,10),
+  main= "Confidence intervals of the SMR",
+  xlab="County", ylab="Relative Risk", xaxt="n")
+
+abline(h=1, lty=2)
+for(i in 500:650){
+  if(!is.na(results2$fit_SMR[i])){
+        if(results2$CI95_lower[i]>1 ) {
+            sig.col <- brewer.pal(4, "Reds")[4]
+            col <- sig.col
+            lty <- 2
+            #text(i, SMR_data$CI95_upper[i]+.31,
+                #srt=90, col=sig.col, cex=.85)
+        } else {
+            col <- "black"
+            lty <- 1
+        }
+        lines(c(i,i), c(results2$CI95_lower[i],results2$CI95_upper[i]), col=col, lty=lty)
+        points(x=i, y=results2$fit_SMR[i], pch=18, col=col)
+  }
+}
+```
+
+```{r}
+covariates <- read_csv("Census_data/census_covariates_Fortaleza_01_03_19.csv", 
+    col_types = cols(Cod_setor = col_character()))
+```
+
+Calculate LII
+
+```{r}
+
+covariates <- covariates %>% mutate(Total_no_HH_in_CT=replace(Total_no_HH_in_CT, is.na(Total_no_HH_in_CT), 0), Total_HH_inc_in_CT=replace(Total_HH_inc_in_CT, is.na(Total_HH_inc_in_CT), 0), Mean_HH_inc=replace(Mean_HH_inc, is.na(Mean_HH_inc), 0))
+                                    
+                                    
+covariates$LII <- NA
+
+for (i in 1:3044){
+  CT_Code <- CT_shp@data$CD_GEOCODI[i]
+  neighbors_codes <- CT_shp@data$CD_GEOCODI[CT_wm[[i]]]
+  total_nb_inc <- sum(covariates[(covariates$Cod_setor %in% neighbors_codes),]$Total_HH_inc_in_CT)
+  total_nb_hh <- sum(covariates[(covariates$Cod_setor %in% neighbors_codes),]$Total_no_HH_in_CT)
+  Mean_nb_inc <- total_nb_inc / total_nb_hh
+  LII <- Mean_nb_inc / covariates[(covariates$Cod_setor)==CT_Code,]$Mean_HH_inc
+  covariates[(covariates$Cod_setor==CT_Code),]$LII <- LII
+}
+
+covariates$LII[covariates$LII==Inf] <- NA 
+covariates$log_LII <- log(covariates$LII)
+
+```
+
+```{r}
+BYM_data_covar <- BYM_data %>% left_join(covariates, by=c("CD_GEOCODI"="Cod_setor")) %>% mutate(log_mean_HH_inc=log(Mean_HH_inc)) %>% arrange(CD_GEOCODI) %>% mutate(bymID=1:3044)
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_mean_HH_inc=replace(log_mean_HH_inc, log_mean_HH_inc==-Inf | is.na(log_mean_HH_inc), 0), log_LII=replace(log_LII, log_LII==-Inf | is.na(log_LII), 0), Perc_Wtr_Spply_Ntwrk=replace(Perc_Wtr_Spply_Ntwrk, is.na(Perc_Wtr_Spply_Ntwrk), 0), Perc_branca=replace(Perc_branca, is.na(Perc_branca), 0), Perc_Garbage_Col_Serv=replace(Perc_Garbage_Col_Serv, is.na(Perc_Garbage_Col_Serv), 0), Perc_PPH_Elec=replace(Perc_PPH_Elec, is.na(Perc_PPH_Elec), 0), Lit_rate=replace(Lit_rate, is.na(Lit_rate), 0), ICE=replace(ICE, is.na(ICE), 0)) 
+
+BYM_data_covar <- BYM_data_covar %>% mutate(ICE_quant=cut(ICE, breaks=quantile(BYM_data_covar$ICE, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_inc_quant=cut(log_mean_HH_inc, breaks=quantile(BYM_data_covar$log_mean_HH_inc, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_LII_quant=cut(log_LII, breaks=quantile(BYM_data_covar$log_LII, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_inc_demean=log_mean_HH_inc-mean(BYM_data_covar$log_mean_HH_inc, na.rm=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(Perc_branca_demean=Perc_branca-mean(BYM_data_covar$Perc_branca, na.rm=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(Lit_rate_demean=Lit_rate-mean(BYM_data_covar$Lit_rate, na.rm=TRUE))
+
+
+```
+
+```{r}
+formula_bym_1 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + log_inc_quant
+
+model_bym_1 <- inla(formula_bym_1, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_2 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + ICE_quant
+
+model_bym_2 <- inla(formula_bym_2, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_3 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + log_LII_quant
+
+model_bym_3 <- inla(formula_bym_3, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_4 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Perc_branca_demean
+
+model_bym_4 <- inla(formula_bym_4, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_5 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Lit_rate_demean
+
+model_bym_5 <- inla(formula_bym_5, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_6 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Perc_branca
+
+model_bym_6 <- inla(formula_bym_6, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+formula_bym_7 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + log_inc_quant + ICE_quant + log_LII_quant + Lit_rate_demean + Perc_branca_demean
+
+
+model_bym_7 <- inla(formula_bym_7, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), control.compute = list(dic = TRUE), verbose = TRUE)
+
+```
+
+
+```{r}
+
+formula_bym_8 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Perc_Wtr_Spply_Ntwrk + Perc_Garbage_Col_Serv + Perc_PPH_Elec + Lit_rate + log_mean_HH_inc + ICE + log_LII + Perc_branca
+
+model_bym_8 <- inla(formula_bym_8, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), verbose = TRUE)
+
+formula_bym_9 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Perc_Garbage_Col_Serv + Lit_rate + log_mean_HH_inc + ICE_quant + Perc_branca
+
+model_bym_9 <- inla(formula_bym_9, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), verbose = TRUE)
+```
+
+```{r}
+summary(model_bym_1)
+summary(model_bym_2)
+summary(model_bym_3)
+summary(model_bym_4)
+summary(model_bym_5)
+summary(model_bym_6)
+summary(model_bym_7)
+summary(model_bym_8)
+```
+
+
+```{r}
+BYM_data_ICE <- BYM_data_covar %>% mutate(raw_SMR = y / E) %>% mutate(log_SMR = log(raw_SMR)) 
+
+ggplot(BYM_data_ICE, aes(x=ICE_quant, y=raw_SMR)) + geom_boxplot() + 
+    coord_cartesian(ylim = c(0, 10)) + geom_hline(yintercept = 1.0)
+
+ggplot(BYM_data_ICE, aes(x=ICE_quant, y=log_SMR)) + geom_boxplot() + geom_hline(yintercept = 0.0)
+
+
+BYM_data_ICE <- BYM_data_ICE %>% group_by(ICE_quant) %>% summarize(mean_SMR = mean(raw_SMR, na.rm=TRUE))
+
+ggplot(BYM_data_ICE, aes(x=ICE_quant, y=mean_SMR)) + geom_bar(stat = "identity", fill="firebrick3") + geom_hline(yintercept = 1.0)
+
+BYM_data_inc <- BYM_data_covar %>% mutate(raw_SMR = y / E) %>% mutate(log_SMR = log(raw_SMR)) 
+
+ggplot(BYM_data_inc, aes(x=log_inc_quant, y=raw_SMR)) + geom_boxplot() + 
+    coord_cartesian(ylim = c(0, 10)) + geom_hline(yintercept = 1.0)
+
+```
+

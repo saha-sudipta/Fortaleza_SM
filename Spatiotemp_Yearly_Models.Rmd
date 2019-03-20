@@ -1,0 +1,279 @@
+---
+title: "Spatio-temporal Yearly models"
+output: html_notebook
+---
+
+
+
+```{r}
+library(INLA)
+library(dplyr)
+library(readr)
+library(stringi)
+library(rgdal)
+library(spdep)
+```
+```{r}
+plot_fort_maps2 <- function(data, fill_str, legend_title, plot_title, size=0.1){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+    geom_polygon(                                          # make a polygon
+      data = data,                                    # data frame
+      aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+                 fill = fill_str),
+      size=size, color="black") +                # variable to use for filling
+    scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                      drop = FALSE) + # fill with brewer colors   # add title
+    theme(line = element_blank(),
+          axis.text=element_blank(),      # .. tickmarks..
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin = unit(c(0, 0, 0, 0), "cm"),
+          #legend.text=element_text(size=15),
+          #legend.title=element_text(size=17), # .. axis labels..
+          panel.background = element_blank(), plot.title = element_text(size=5)) + ggtitle(plot_title)
+}
+
+
+
+shape_to_ggplot <- function(shape){
+  require(broom)
+  gg_data <- tidy(shape)
+  data <- slot(shape, "data")
+  shape[["polyID"]] <- sapply(slot(shape, "polygons"), function(x) slot(x, "ID"))
+  gg_data <- merge(gg_data, shape, by.x="id", by.y="polyID")
+  return(gg_data)
+}
+```
+
+
+```{r}
+SMR_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_per_mnth_MISSING_ADJ.csv",
+    col_types = cols(CD_GEOCODI = col_character()))
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles/Shapefiles/CTs/", "Corrected_CTs", use_iconv = TRUE, encoding = "latin1")
+CT_shp_gg <- shape_to_ggplot(CT_shp)
+```
+
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero.
+
+```{r}
+SMR_data <- SMR_data  %>%
+  mutate(Year=cut(Counter, breaks=seq(0,204,12), labels=c(2001:2017))) %>%
+  group_by(Year, CD_GEOCODI) %>%
+  summarize(y=sum(y), E=sum(E)) %>%
+  mutate(SMR=y/E) %>% 
+  mutate(SMR=replace(SMR, SMR==Inf | is.nan(SMR), 0)) %>% as.data.frame() %>% rename(obs_count=y, exp_count=E) %>% na.omit()
+
+```
+
+```{r}
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+CT_shp@data <- arrange(CT_shp@data, CD_GEOCODI)
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+```
+
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero. Also turning counts to zero if underlying population is zero
+
+```{r}
+yearly_shp_data <- data.frame(CD_GEOCODI=unique(CT_shp@data$CD_GEOCODI)) 
+
+yearly_shp_data <- yearly_shp_data %>% slice(rep(1:n(), each = 17)) %>% arrange(CD_GEOCODI) %>% mutate(bymID=unlist(lapply(1:3044, function(x) rep(x,17))))
+
+yearly_shp_data  <- as.data.frame(yearly_shp_data)
+
+yearly_shp_data$Year <- rep(1:17, 3044)
+  
+SMR_data$Year <- as.integer(SMR_data$Year)
+yearly_shp_data$CD_GECODI <- as.integer(yearly_shp_data$CD_GEOCODI)
+  
+BYM_data <- SMR_data %>% rename(y=obs_count, E=exp_count) %>% right_join(yearly_shp_data, by=c("CD_GEOCODI", "Year")) %>% mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0)) %>% dplyr::select(CD_GEOCODI, y, E, Year) %>% arrange(CD_GEOCODI) %>% mutate(bymID=unlist(lapply(1:3044, function(x) rep(x,17))))
+
+BYM_data$fix_2016 <- ifelse(BYM_data$Year==16,1,0)
+
+BYM_data$year_int <- BYM_data$Year - 1
+
+BYM_data$bymID2 <- BYM_data$bymID
+BYM_data$bymID3 <- BYM_data$bymID
+```
+
+```{r}
+formula_yrlytrnd_2016fix <- y ~ 1 + f(bymID, model="bym",graph=CT_adj, constr=TRUE) + f(bymID2, year_int, model="iid", constr=TRUE) + year_int + f(bymID3, fix_2016, model="iid", constr=TRUE) + fix_2016
+
+model_yrlytrnd_2016fix <- inla(formula_yrlytrnd_2016fix, family="poisson", data=BYM_data, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+```
+
+
+```{r}
+covariates <- read_csv("Census_data/census_covariates_Fortaleza_01_03_19.csv", 
+    col_types = cols(Cod_setor = col_character()))
+```
+
+Calculate LII
+
+```{r}
+
+covariates <- covariates %>% mutate(Total_no_HH_in_CT=replace(Total_no_HH_in_CT, is.na(Total_no_HH_in_CT), 0), Total_HH_inc_in_CT=replace(Total_HH_inc_in_CT, is.na(Total_HH_inc_in_CT), 0), Mean_HH_inc=replace(Mean_HH_inc, is.na(Mean_HH_inc), 0))
+                                    
+                                    
+covariates$LII <- NA
+
+for (i in 1:3044){
+  CT_Code <- CT_shp@data$CD_GEOCODI[i]
+  neighbors_codes <- CT_shp@data$CD_GEOCODI[CT_wm[[i]]]
+  total_nb_inc <- sum(covariates[(covariates$Cod_setor %in% neighbors_codes),]$Total_HH_inc_in_CT)
+  total_nb_hh <- sum(covariates[(covariates$Cod_setor %in% neighbors_codes),]$Total_no_HH_in_CT)
+  Mean_nb_inc <- total_nb_inc / total_nb_hh
+  LII <- Mean_nb_inc / covariates[(covariates$Cod_setor)==CT_Code,]$Mean_HH_inc
+  covariates[(covariates$Cod_setor==CT_Code),]$LII <- LII
+}
+
+covariates$LII[covariates$LII==Inf] <- NA 
+covariates$log_LII <- log(covariates$LII)
+
+```
+
+```{r}
+BYM_data_covar <- BYM_data %>% left_join(covariates, by=c("CD_GEOCODI"="Cod_setor")) %>% mutate(log_mean_HH_inc=log(Mean_HH_inc)) %>% arrange(CD_GEOCODI) 
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_mean_HH_inc=replace(log_mean_HH_inc, log_mean_HH_inc==-Inf | is.na(log_mean_HH_inc), 0), log_LII=replace(log_LII, log_LII==-Inf | is.na(log_LII), 0), Perc_Wtr_Spply_Ntwrk=replace(Perc_Wtr_Spply_Ntwrk, is.na(Perc_Wtr_Spply_Ntwrk), 0), Perc_branca=replace(Perc_branca, is.na(Perc_branca), 0), Perc_Garbage_Col_Serv=replace(Perc_Garbage_Col_Serv, is.na(Perc_Garbage_Col_Serv), 0), Perc_PPH_Elec=replace(Perc_PPH_Elec, is.na(Perc_PPH_Elec), 0), Lit_rate=replace(Lit_rate, is.na(Lit_rate), 0), ICE=replace(ICE, is.na(ICE), 0)) 
+
+BYM_data_covar <- BYM_data_covar %>% mutate(ICE_quant=cut(ICE, breaks=quantile(BYM_data_covar$ICE, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_inc_quant=cut(log_mean_HH_inc, breaks=quantile(BYM_data_covar$log_mean_HH_inc, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_LII_quant=cut(log_LII, breaks=quantile(BYM_data_covar$log_LII, probs=c(seq(0,1,0.25),1)[1:5]), include.lowest=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(log_inc_demean=log_mean_HH_inc-mean(BYM_data_covar$log_mean_HH_inc, na.rm=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(Perc_branca_demean=Perc_branca-mean(BYM_data_covar$Perc_branca, na.rm=TRUE))
+
+BYM_data_covar <- BYM_data_covar %>% mutate(Lit_rate_demean=Lit_rate-mean(BYM_data_covar$Lit_rate, na.rm=TRUE))
+
+
+```
+
+```{r}
+formula_yrlytrnd_2016fix_covar <- y ~ 1 + f(bymID, model="bym",graph=CT_adj, constr=TRUE) + f(bymID2, year_int, model="iid", constr=TRUE) + year_int + f(bymID3, fix_2016, model="iid", constr=TRUE) + fix_2016 + log_inc_quant + ICE_quant + log_LII_quant + Lit_rate_demean + Perc_branca_demean
+
+model_yrlytrnd_2016fix_covar <- inla(formula_yrlytrnd_2016fix_covar, family="poisson", data=BYM_data_covar, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+```
+
+```{r}
+formula_only_covar <- y ~ 1 + log_inc_quant + ICE_quant + log_LII_quant + Lit_rate_demean + Perc_branca_demean
+
+model_only_covar<- inla(formula_only_covar, family="poisson", data=BYM_data_covar, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+```
+
+```{r}
+formula_only_covar3 <- y ~ 1 + log_inc_quant + log_LII_quant
+
+model_only_covar3 <- inla(formula_only_covar3, family="poisson", data=BYM_data_covar, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+formula_only_covar4 <- y ~ 1 + ICE_quant
+
+model_only_covar4 <- inla(formula_only_covar4, family="poisson", data=BYM_data_covar, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+```
+
+```{r}
+formula_only_covar3 <- y ~ 1 + ICE_quant + log_LII_quant + Lit_rate_demean + Perc_branca_demean
+
+model_only_covar3 <- inla(formula_only_covar2, family="poisson", data=BYM_data_covar, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+```
+
+
+```{r}
+results_null <- data.frame(bymID = BYM_data$bymID, year=BYM_data$Year, smr_fit=model_yrlytrnd_2016fix$summary.fitted.values$mean, global_trnd=rep(model_yrlytrnd_2016fix$summary.fixed$mean[2], 51748), global_2016=rep(model_yrlytrnd_2016fix$summary.fixed$mean[3], 51748))
+```
+
+```{r}
+results_null$fix_2016 <- ifelse(results_null$year==16,1,0)
+
+results_null$trendfit <- exp((results_null$global_trnd * results_null$year) + (results_null$global_2016 * results_null$fix_2016))
+
+```
+
+```{r}
+results_null_plot1 <- dplyr::select(results_null, bymID, year, smr_fit) %>% mutate(type="CT_specific")
+results_null_plot2 <- results_null %>% dplyr::select(year, trendfit) %>% rename(smr_fit=trendfit) %>% mutate(type="global") %>% unique() %>% mutate(bymID=3055)
+results_null_plot <- rbind(results_null_plot1, results_null_plot2)
+```
+
+```{r}
+library(ggplot2)
+library(plotly)
+p <- ggplot() + geom_line(data=results_null_plot, aes(x=year, y=smr_fit, group=bymID, color=type, linetype=type))
+ggplotly(p)
+```
+
+```{r}
+plot_dfs <- lapply(1:17, function(x) filter(select(results_null, year, bymID, smr_fit), year==x))
+breaks=c(-1, 0.5, 0.75, 1.0, 1.25, 1.50, 1.75, 2.0, 5.0, Inf)
+labels=c("<0.5", "0.5-0.75",
+               "0.75-1.0", "1.0-1.25","1.25-1.50","1.5-1.75", "1.75-2.0",
+               "2.0-5.0", ">5.0")
+plot_dfs <- lapply(plot_dfs, function(x) cbind(x, smr_cut=cut(x$smr_fit, breaks, labels)))
+```
+
+```{r}
+CT_shp_gg <- left_join(CT_shp_gg, select(BYM_data, bymID, CD_GEOCODI), by="CD_GEOCODI")
+plot_dfs <- lapply(plot_dfs, function(x) left_join(CT_shp_gg, x, by="bymID"))
+```
+
+```{r}
+fit_plots <- vector("list", 17)
+for (i in 1:length(plot_dfs)){
+  p <- plot_fort_maps2(plot_dfs[[i]], fill_str="smr_cut", legend_title = paste0("Standardized Mortality\nRatio - ", (2000+i)), plot_title = as.character(2000+i))
+  print(p)
+  fit_plots[[i]] <- p + theme(legend.position = "right", plot.title = element_text(size=22, hjust=0.5))
+}
+```
+
+
+
+```{r}
+dir.create("examples")
+setwd("examples")
+
+# example 1: simple animated countdown from 10 to "GO!".
+png(file="example%02d.png", height=200, width=300, units="mm", res=300)
+  for (i in 1:17){
+    print(fit_plots[[i]])
+  }
+dev.off()
+
+# convert the .png files to one .gif file using ImageMagick. 
+# The system() function executes the command as if it was done
+# in the terminal. the -delay flag sets the time between showing
+# the frames, i.e. the speed of the animation.
+system("convert -delay 80 *.png example_1.gif")
+
+# to not leave the directory with the single jpeg files
+# I remove them.
+file.remove(list.files(pattern=".png"))
+```
+
+```{r}
+mat.marg <- matrix(NA, nrow=51748, ncol=100000)
+m <- model_only_covar$marginals.random$ID
+for (i in 1:51748){
+   u <- m[[51748+i]]
+   mat.marg[i,] <- inla.rmarginal(100000, u)
+ }
+var.u <- apply(mat.marg, 2, var)
+We also extract the expected value of the variance for the unstructured component
+> var.v <- inla.rmarginal(100000,inla.tmarginal(function(x) 1/x, mod.suicides$marginals.hyper$"Precision for ID (iid component)"))
+and  nally we compute the spatial fractional variance fracspatial as
+> perc.var.u <- mean(var.u/(var.u+var.v))
+> perc.var.u
+[1] 0.9418849
+```
+

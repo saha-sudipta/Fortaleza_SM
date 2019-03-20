@@ -1,0 +1,117 @@
+---
+title: "Aggregate Individual Level Characteristics"
+output: html_notebook
+---
+
+```{r message=FALSE}
+library(rgdal)
+library(spdep)
+library(dplyr)
+library(lubridate)
+library(maptools)
+library(rgeos)
+library(ggplot2)
+```
+
+
+
+Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.
+
+```{r}
+homs_01_10 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10/", "hom2001a2010_final")
+
+homs_11_17 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17/", "hom2011a2017_06042018" )
+
+```
+
+Rename columns to enable merge
+
+YOD = Year of Death
+DOD = Date of Death
+HOD = Hour of Death
+DOB = Date of Birth
+
+```{r}
+#Select specific columns in each
+homs_01_10@data <- select(homs_01_10@data, NAME, ANO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, nome_novo)
+
+homs_11_17@data <- select(homs_11_17@data, NUMERODO, ANO_OBITO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, BAIRRONOVO)
+
+colnames(homs_01_10@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+colnames(homs_11_17@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+#MERGE
+
+homs_01_17 <- do.call(rbind, list(homs_01_10, homs_11_17))
+```
+
+Detect and delete duplicates
+
+
+Then get rid of duplicates
+Will compare all fields except potential_ID
+homs_01_17
+
+```{r}
+df <- homs_01_17@data
+df$coords.x1 <- round(homs_01_17@coords[,1], 1)
+df$coords.x2 <- round(homs_01_17@coords[,2], 1)
+
+homs_01_17 <- homs_01_17[!duplicated(df),]
+rm(df)
+```
+
+
+Creating dates
+
+```{r}
+homs_01_17$DOD = as.Date(strptime(homs_01_17$DOD, "%d%m%Y"))
+homs_01_17$DOB = as.Date(strptime(homs_01_17$DOB, "%d%m%Y"))
+homs_01_17$Age <- interval(homs_01_17$DOB, homs_01_17$DOD) / years(1)
+```
+
+Group ages
+
+```{r}
+homs_01_17$AgeGroup1 <- cut(homs_01_17$Age, breaks=c(0, 15, 25, 45, 65, Inf), labels=c("0-14","15-24","25-44","45-64","65+"))
+
+homs_01_17$AgeGroup2 <- cut(homs_01_17$Age, breaks=c(0, 10, 15, 20, 25, 35, 45, 55, 75, Inf), labels=c("0-9","10-14","15-19","20-24","25-34","35-44","45-54","55-74","75+"))
+```
+
+
+
+```{r}
+homs_age <- homs_01_17@data %>% group_by(AgeGroup2) %>% summarize(count=n())
+homs_age$AgeGroup2 <- as.character(homs_age$AgeGroup2)
+homs_age[is.na(homs_age$AgeGroup2),"AgeGroup2"] <- "Missing"
+
+p = ggplot(homs_age, aes(x=AgeGroup2, y=count, fill=count)) +
+    geom_bar(stat="identity") + theme_light() + scale_fill_gradient(low = "#C6DBEF", high = "#08519C")
+p
+p + theme(axis.text.x = element_text(angle=45, vjust = 1, hjust=1)) + coord_polar()
+```
+
+```{r}
+homs_sex <- homs_01_17@data %>% group_by(Sex) %>% summarize(count=n())
+homs_sex$Sex <- as.character(homs_sex$Sex)
+homs_sex[is.na(homs_sex$Sex),"Sex"] <- "Missing"
+homs_sex <- homs_sex[homs_sex$Sex!="I",]
+
+p = ggplot(homs_sex, aes(x=Sex, y=count, fill=count)) +
+    geom_bar(stat="identity") + theme_light() + scale_fill_gradient(low = "#C6DBEF", high = "#08519C")
+p
+p + theme(axis.text.x = element_text(angle=45, vjust = 1, hjust=1)) + coord_polar()
+```
+
+```{r}
+homs_race <- homs_01_17@data %>% group_by(Race) %>% summarize(count=n())
+homs_race$Race <- as.character(homs_race$Race)
+homs_race$Race <- c("Branca", "Preta", "Amarela", "Parda", "Indigena", "Missing")
+
+p = ggplot(homs_race, aes(x=Race, y=count, fill=count)) +
+    geom_bar(stat="identity") + theme_light() + scale_fill_gradient(low = "#C6DBEF", high = "#08519C")
+p
+p + theme(axis.text.x = element_text(angle=45, vjust = 1, hjust=1)) + coord_polar() + aes(x=reorder(Race, count))
+```
+

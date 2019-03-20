@@ -1,0 +1,124 @@
+---
+title: "Covariate descriptive maps"
+output: html_notebook
+---
+
+```{r}
+plot_fort_maps2 <- function(data, fill_str, legend_title, plot_title, size=0.1){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+    geom_polygon(                                          # make a polygon
+      data = data,                                    # data frame
+      aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+                 fill = fill_str),
+      size=size, color="black") +                # variable to use for filling
+    scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                      drop = FALSE) + # fill with brewer colors   # add title
+    theme(line = element_blank(),
+          axis.text=element_blank(),      # .. tickmarks..
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin = unit(c(0, 0, 0, 0), "cm"),
+          #legend.text=element_text(size=15),
+          #legend.title=element_text(size=17), # .. axis labels..
+          panel.background = element_blank(), plot.title = element_text(size=5)) + ggtitle(plot_title)
+}
+
+
+
+shape_to_ggplot <- function(shape){
+  require(broom)
+  gg_data <- tidy(shape)
+  data <- slot(shape, "data")
+  shape[["polyID"]] <- sapply(slot(shape, "polygons"), function(x) slot(x, "ID"))
+  gg_data <- merge(gg_data, shape, by.x="id", by.y="polyID")
+  return(gg_data)
+}
+```
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringi)
+library(rgdal)
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Census_data/CE_setores_censitarios_shape/", "Corrected_CTs", use_iconv = TRUE, encoding = "latin1")
+```
+
+```{r}
+library(spdep)
+library(dplyr)
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+CT_shp@data <- arrange(CT_shp@data, CD_GEOCODI)
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+```
+
+```{r}
+library(INLA)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+```
+
+```{r}
+Census_covar <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/census_covariates_Fortaleza_01_03_19.csv")
+
+Census_covar[is.na(Census_covar$Mean_HH_inc),]$Mean_HH_inc <- 1
+Census_covar[Census_covar$Mean_HH_inc==0,]$Mean_HH_inc <- 1
+Census_covar$log_Mean_HH_inc <- log(Census_covar$Mean_HH_inc)
+Census_covar$Cod_setor <- as.character(Census_covar$Cod_setor)
+
+Census_covar$LII <- NA
+
+for (i in 1:3044){
+  CT_Code <- CT_shp@data$CD_GEOCODI[i]
+  neighbors_codes <- CT_shp@data$CD_GEOCODI[CT_wm[[i]]]
+  total_nb_inc <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_HH_inc_in_CT, na.rm = TRUE)
+  total_nb_hh <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_no_HH_in_CT, na.rm = TRUE)
+  Mean_nb_inc <- total_nb_inc / total_nb_hh
+  LII <- Mean_nb_inc / Census_covar[(Census_covar$Cod_setor)==CT_Code,]$Mean_HH_inc
+  Census_covar[(Census_covar$Cod_setor==CT_Code),]$LII <- LII
+}
+
+Census_covar$LII[Census_covar$LII==Inf] <- NA 
+Census_covar$log_LII <- log(Census_covar$LII)
+```
+```{r}
+CT_shp_gg <- shape_to_ggplot(CT_shp)
+```
+
+```{r}
+breaks_inc <- quantile(Census_covar$log_Mean_HH_inc, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_lii <- quantile(Census_covar$LII, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_lit <- quantile(Census_covar$Lit_rate, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_log_lii <- quantile(Census_covar$log_LII, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_brnc <- quantile(Census_covar$Perc_branca, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_swrge <- quantile(Census_covar$Perc_Sewerage_Conn, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+breaks_ice <- quantile(Census_covar$ICE, probs=c(seq(0,1,0.15),1), na.rm = TRUE)
+
+CT_shp_gg_covar <- CT_shp_gg[,-1] %>% left_join(Census_covar, by=c("CD_GEOCODI"="Cod_setor")) %>% mutate(cut_inc=cut(log_Mean_HH_inc, breaks=breaks_inc, include.lowest=TRUE), cut_lii=cut(LII, breaks=breaks_lii, include.lowest=TRUE), cut_brnc=cut(Perc_branca, breaks=breaks_brnc, include.lowest=TRUE), cut_swrge=cut(Perc_Sewerage_Conn, breaks=breaks_swrge, include.lowest=TRUE), cut_ice=cut(ICE, breaks=breaks_ice, include.lowest=TRUE), cut_log_lii=cut(log_LII, breaks=breaks_log_lii, include.lowest=TRUE), cut_lit=cut(Lit_rate, breaks=breaks_lit, include.lowest=TRUE))
+
+```
+
+```{r}
+plot_fort_maps2(CT_shp_gg_covar, "cut_inc","Log Mean HH Income", "Log Mean HH Income") + theme(plot.title = element_text(size=10), legend.position = "right") + scale_fill_brewer(name="Log Mean HH Income", palette = "RdYlBu", direction=1, drop = FALSE)
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_log_lii","Log LII", "Log LII") + theme(plot.title = element_text(size=10), legend.position = "right") 
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_lii","LII", "LII") + theme(plot.title = element_text(size=10), legend.position = "right") 
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_lit","Literacy Rate", "Literacy Rate") + theme(plot.title = element_text(size=10), legend.position = "right") + scale_fill_brewer(name="Literacy Rate", palette = "RdYlBu", direction=1, drop = FALSE)
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_brnc","Perc branca", "Perc branca") + theme(plot.title = element_text(size=10), legend.position = "right") + scale_fill_brewer(name="Perc branca", palette = "RdYlBu", direction=1, drop = FALSE)
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_swrge","Perc Sewerage", "Perc Sewerage") + theme(plot.title = element_text(size=10), legend.position = "right") + scale_fill_brewer(name="Perc Sewerage", palette = "RdYlBu", direction=1, drop = FALSE)
+
+plot_fort_maps2(CT_shp_gg_covar, "cut_ice","ICE Index", "ICE Index") + theme(plot.title = element_text(size=10), legend.position = "right") + scale_fill_brewer(name="ICE Index", palette = "RdYlBu", direction=1, drop = FALSE)
+
+```
+
+```{r}
+
+```
+

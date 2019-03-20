@@ -1,0 +1,155 @@
+---
+title: "Spatiotemporal models with covariates"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+SMR_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_mnth.csv",
+    col_types = cols(CD_GEOCODI = col_character()))
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringi)
+library(rgdal)
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Census_data/CE_setores_censitarios_shape/", "Corrected_CTs", use_iconv = TRUE, encoding = "latin1")
+```
+
+
+```{r}
+library(spdep)
+library(dplyr)
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+CT_shp@data <- arrange(CT_shp@data, CD_GEOCODI)
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+```
+
+```{r}
+library(INLA)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+```
+
+```{r}
+SMR_data <- rbind(SMR_data, data.frame(CD_GEOCODI= unlist(lapply(CT_shp@data$CD_GEOCODI[!(CT_shp@data$CD_GEOCODI %in% SMR_data$CD_GEOCODI)], function(x) rep(x,204))), Counter=rep(1:204, 23), obs_count=rep(0,23*204), exp_count=rep(0,23*204), pop=rep(0,23*204), SMR_per_mnth=rep(0,23*204), IR_per_mnth=rep(0,23*204)))
+```
+
+```{r}
+library(INLA)
+library(dplyr)
+BYM_data <- dplyr::select(SMR_data, CD_GEOCODI, obs_count, exp_count, Counter)
+colnames(BYM_data) <- c("CD_GEOCODI", "y", "E", "time")
+  
+BYM_data[is.na(BYM_data$y),"y"] <- 0
+BYM_data[is.na(BYM_data$y),"E"] <- 0
+
+BYM_data <- arrange(BYM_data, CD_GEOCODI, time)
+bymID <- unlist(lapply(1:3044, function(x) rep(x, 204)))
+BYM_data <- cbind(BYM_data, bymID)
+BYM_data$bymID1 <- BYM_data$bymID
+BYM_data$time1 <- BYM_data$time
+BYM_data$CD_GEOCODI <- as.numeric(BYM_data$CD_GEOCODI)
+
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+BYM_data$CD_GEOCODI <- as.character(BYM_data$CD_GEOCODI)
+df <- dplyr::left_join(CT_shp@data, dplyr::select(BYM_data, CD_GEOCODI, bymID), by="CD_GEOCODI")
+CT_shp@data <- df[!duplicated(df),]
+CT_shp@data$id <- CT_shp@data$bymID 
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+
+```
+
+```{r}
+Census_covar <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/census_covariates_Fortaleza.csv")
+
+Census_covar[is.na(Census_covar$Mean_HH_inc),]$Mean_HH_inc <- 1
+Census_covar[Census_covar$Mean_HH_inc==0,]$Mean_HH_inc <- 1
+Census_covar$log_Mean_HH_inc <- log(Census_covar$Mean_HH_inc)
+Census_covar$Cod_setor <- as.character(Census_covar$Cod_setor)
+
+Census_covar$LII <- NA
+
+for (i in 1:3044){
+  CT_Code <- CT_shp@data$CD_GEOCODI[i]
+  neighbors_codes <- CT_shp@data$CD_GEOCODI[CT_wm[[i]]]
+  total_nb_inc <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_HH_inc_in_CT)
+  total_nb_hh <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_no_HH_in_CT)
+  Mean_nb_inc <- total_nb_inc / total_nb_hh
+  LII <- Mean_nb_inc / Census_covar[(Census_covar$Cod_setor)==CT_Code,]$Mean_HH_inc
+  Census_covar[(Census_covar$Cod_setor==CT_Code),]$LII <- LII
+}
+
+Census_covar$LII[Census_covar$LII==Inf] <- NA 
+Census_covar$log_LII <- log(Census_covar$LII)
+
+BYM_data_covar <- left_join(BYM_data, Census_covar, by=c("CD_GEOCODI"="Cod_setor"))
+
+
+
+```
+
+```{r}
+BYM_data_notime <- BYM_data %>% group_by(CD_GEOCODI) %>% summarize(y=sum(y), E=sum(E))
+BYM_data_notime$bymID <- 1:3044
+BYM_data_notime_covar <- left_join(BYM_data_notime, Census_covar, by=c("CD_GEOCODI"="Cod_setor"))
+```
+
+```{r}
+BYM_data_yrly <- BYM_data
+BYM_data_yrly$yr <- ceiling(BYM_data_yrly$time / 12)
+BYM_data_yrly <- BYM_data_yrly %>% group_by(CD_GEOCODI, yr, bymID) %>% summarize(y=sum(y), E=sum(E))
+BYM_data_yrly <- left_join(BYM_data_yrly, Census_covar, by=c("CD_GEOCODI"="Cod_setor"))
+BYM_data_yrly$time <- BYM_data_yrly$yr
+BYM_data_yrly$time1 <- BYM_data_yrly$time
+```
+
+
+```{r}
+formula.CT.1 <- y ~ 1 + f(bymID, model="bym", graph=CT_adj) + Lit_rate + log_Mean_HH_inc + Perc_Sewerage_Conn + log_LII + Perc_PPH_Elec
+
+formula.CT.2 <- y ~ f(bymID, model="bym", graph=CT_adj) + f(time, model="rw2") + f(time1, model="iid") + Lit_rate + log_Mean_HH_inc + Perc_Sewerage_Conn + log_LII + Perc_PPH_Elec
+```
+
+```{r}
+model_CT_1 <- inla(formula.CT.1, family="poisson", data=BYM_data_notime_covar, E=E, control.predictor=list(compute=TRUE), verbose = TRUE)
+```
+
+
+```{r}
+formula.CT.2 <- y ~ f(bymID, model="bym", graph=CT_adj) + f(time, model="rw2") + f(time1, model="iid") + Lit_rate + log_Mean_HH_inc + Perc_Sewerage_Conn + log_LII + Perc_PPH_Elec
+
+model_CT_2 <- inla(formula.CT.2, family="poisson", data=BYM_data_covar, E=E, control.predictor=list(compute=TRUE), verbose = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+CT_ggplot <- shape_to_ggplot(CT_shp)
+```
+
+
+```{r}
+m <- model_CT_1$marginals.random[[1]][1:3044]
+zeta.1 <- unlist(lapply(m, function(x) inla.emarginal(exp,x)))
+beta_0 <- model_CT_1$summary.fixed$mean
+```
+
+
+```{r}
+results_df <- BYM_data
+results_df$mean_fittedSMR <- model_CT_1$summary.fitted.values$mean
+```
+
+```{r}
+results_map_df <- results_df
+zeta=unlist(zeta.ST1)
+```
+
+```{r}
+results_map_df <- left_join(CT_ggplot, results_map_df, by=c("CD_GEOCODI"))
+results_map_df
+results_map_df$cut_smr = SMR_cut_v1(results_map_df$mean_fittedSMR)
+plot_fort_maps2(results_map_df, "cut_smr", "Month 1")
+```

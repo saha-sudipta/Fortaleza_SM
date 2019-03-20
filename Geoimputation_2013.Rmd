@@ -1,0 +1,278 @@
+---
+title: "Distributing ungeocoded homicides"
+output: html_notebook
+---
+
+I am going to distribute the non-geocoded homicides from 2013.
+
+
+```{r message=FALSE}
+library(rgdal)
+library(spdep)
+library(dplyr)
+library(lubridate)
+library(maptools)
+library(rgeos)
+library(readr)
+library(INLA)
+library(stringi)
+```
+
+```{r}
+plot_fort_maps2 <- function(data, fill_str, legend_title, plot_title, size=0.1){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+    geom_polygon(                                          # make a polygon
+      data = data,                                    # data frame
+      aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+                 fill = fill_str),
+      size=size, color="black") +                # variable to use for filling
+    scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                      drop = FALSE) + # fill with brewer colors   # add title
+    theme(line = element_blank(),
+          axis.text=element_blank(),      # .. tickmarks..
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin = unit(c(0, 0, 0, 0), "cm"),
+          #legend.text=element_text(size=15),
+          #legend.title=element_text(size=17), # .. axis labels..
+          panel.background = element_blank(), plot.title = element_text(size=5)) + ggtitle(plot_title)
+}
+
+
+
+shape_to_ggplot <- function(shape){
+  require(broom)
+  gg_data <- tidy(shape)
+  data <- slot(shape, "data")
+  shape[["polyID"]] <- sapply(slot(shape, "polygons"), function(x) slot(x, "ID"))
+  gg_data <- merge(gg_data, shape, by.x="id", by.y="polyID")
+  return(gg_data)
+}
+```
+Read in Spatial Point Files. 2001-10 are in one file and 11-17 are in another.
+
+```{r}
+homs_01_10 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2001_10/", "hom2001a2010_final")
+
+homs_11_17 <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/2011_17/", "hom2011a2017_06042018" )
+
+```
+
+Rename columns to enable merge
+
+YOD = Year of Death
+DOD = Date of Death
+HOD = Hour of Death
+DOB = Date of Birth
+
+```{r}
+#Select specific columns in each
+homs_01_10@data <- select(homs_01_10@data, NAME, ANO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, nome_novo)
+
+homs_11_17@data <- select(homs_11_17@data, NUMERODO, ANO_OBITO, DTOBITO, HORAOBITO, DTNASC, IDADE, SEXO, RACACOR, CAUSABAS, LINHAA, LINHAB, LINHAC, LINHAD, LINHAII, BAIRRONOVO)
+
+colnames(homs_01_10@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+colnames(homs_11_17@data) <- c("possible_ID", "YOD", "DOD", "HOD", "DOB", "Age", "Sex", "Race", "Base_cause", "LineA", "LineB", "LineC", "LineD", "LineII", "Bairro")
+
+#MERGE
+
+homs_01_17 <- do.call(rbind, list(homs_01_10, homs_11_17))
+```
+
+Detect and delete duplicates
+
+
+Then get rid of duplicates
+Will compare all fields except potential_ID
+homs_01_17
+
+```{r}
+df <- homs_01_17@data
+df$coords.x1 <- round(homs_01_17@coords[,1], 1)
+df$coords.x2 <- round(homs_01_17@coords[,2], 1)
+
+homs_01_17 <- homs_01_17[!duplicated(df),]
+rm(df)
+```
+
+
+Creating dates
+
+```{r}
+homs_01_17$DOD = as.Date(strptime(homs_01_17$DOD, "%d%m%Y"))
+homs_01_17$DOB = as.Date(strptime(homs_01_17$DOB, "%d%m%Y"))
+homs_01_17$Age <- interval(homs_01_17$DOB, homs_01_17$DOD) / years(1)
+```
+
+Group ages
+
+```{r}
+homs_01_17$AgeGroup1 <- cut(homs_01_17$Age, breaks=c(0, 15, 25, 45, 65, Inf), labels=c("0-14","15-24","25-44","45-64","65+"))
+
+homs_01_17$AgeGroup2 <- cut(homs_01_17$Age, breaks=c(0, 10, 15, 20, 25, 35, 45, 55, 75, Inf), labels=c("0-9","10-14","15-19","20-24","25-34","35-44","45-54","55-74","75+"))
+```
+
+```{r}
+homs_temporal <- homs_01_17@data %>% mutate(MOD = month(DOD) + (as.integer(as.character(YOD))-2001)*12) %>% group_by(MOD) %>% summarize(count=n()) %>% na.omit()
+
+homs_temporal$type <- "Geocoded"
+```
+
+```{r}
+library(ggplot2)
+ggplot() + geom_line(data=homs_temporal, aes(x=MOD, y=count))
+```
+
+```{r}
+homs_total <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Total_homs_geo_nongeo.csv")
+```
+
+```{r}
+library(tidyr)
+homs_temporal_2 <- homs_total %>% select(-Total) %>% gather(MOD_name, count, January:December)
+homs_temporal_2$MOD <- sapply(homs_temporal_2$MOD_name, function(x) ifelse(x=="January", 1, ifelse(x=="February", 2, ifelse(x=="March", 3, ifelse(x=="April", 4, ifelse(x=="May", 5, ifelse(x=="June", 6, ifelse(x=="July", 7, ifelse(x=="August", 8, ifelse(x=="September", 9, ifelse(x=="October", 10, ifelse(x=="November", 11, ifelse(x=="December", 12, NA)))))))))))))
+homs_temporal_2$type <- "Total"
+homs_temporal_2$MOD <- homs_temporal_2$MOD + (as.integer(as.character(homs_temporal_2$YOD))-2001)*12
+
+homs_temporal <- rbind(homs_temporal, select(homs_temporal_2[homs_temporal_2$YOD != "Total", ], MOD, count, type))
+rm(homs_temporal_2)
+```
+
+```{r}
+homs_temporal <- rbind(homs_temporal, data.frame(MOD=1:204, count=(arrange(filter(homs_temporal, type=="Total"), MOD)$count - arrange(filter(homs_temporal, type=="Geocoded"), MOD)$count), type=rep("Missing",204)))
+```
+
+```{r}
+library(ggplot2)
+ggplot() + geom_line(data=homs_temporal, aes(x=MOD, y=count, group=type, color=type)) + xlab("Time") + ylab("Homicide Count") + scale_x_continuous(breaks=seq(6,204,12), labels=c(as.character(2001:2017))) + theme(axis.text.x = element_text(angle=45))
+```
+
+
+
+Now I am going to reallocate homicides. Most homicides are missing in months 152 to 154 in 2013.
+
+
+I will fit a null BYM model for 2012, 2013, and 2014. I will then use the fitted SMRs and use that to distribute homicides.
+
+```{r}
+SMR_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_mnth.csv",
+    col_types = cols(CD_GEOCODI = col_character()))
+CT_shp <- readOGR("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Shapefiles/Shapefiles/CTs/", "Corrected_CTs", use_iconv = TRUE, encoding = "latin1")
+CT_shp_gg <- shape_to_ggplot(CT_shp)
+```
+
+
+```{r}
+CT_shp@data$CD_GEOCODI <- as.character(CT_shp@data$CD_GEOCODI)
+CT_shp@data <- arrange(CT_shp@data, CD_GEOCODI)
+CT_wm <- poly2nb(CT_shp, snap=0.001)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+```
+
+Some CTs have homicides but non pop. We have to revisit these. For now, I am turning Inf IR and SMR to zero. At most there are 2 homicides per year in these CTs. Also NaN are pop zero, hom zero. Also turning these to zero. Also turning counts to zero if underlying population is zero
+
+```{r}
+BYM_data <- SMR_data %>% rename(y=obs_count, E=exp_count) %>% 
+  mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0), y=replace(y, IR_per_mnth==Inf | is.nan(IR_per_mnth), 0)) %>% 
+  dplyr::select(CD_GEOCODI, y, E, Counter) %>% 
+  arrange(CD_GEOCODI) %>% 
+  filter(Counter > 143 & Counter < 168) %>% 
+  group_by(CD_GEOCODI) %>%
+  summarize(y=sum(y, na.rm=TRUE), E=sum(E, na.rm=TRUE)) %>% 
+  right_join(CT_shp@data, by="CD_GEOCODI") %>% 
+  dplyr::select(CD_GEOCODI, y, E) %>%
+  mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0))
+            
+BYM_data$bymID <- 1:3044
+
+```
+
+```{r}
+formula_bym_null <- y ~ 1 + f(bymID, model="bym", graph=CT_adj)
+
+model_bym_null <- inla(formula_bym_null, family="poisson", data=BYM_data, E=E, control.predictor=list(compute=TRUE), verbose = TRUE)
+```
+
+```{r}
+results <- data.frame(bymID=BYM_data$bymID, CD_GEOCODI = BYM_data$CD_GEOCODI, fit_SMR = model_bym_null$summary.fitted.values$mean, CI95_lower = model_bym_null$summary.fitted.values$`0.025quant`, CI95_upper=model_bym_null$summary.fitted.values$`0.975quant`, y=BYM_data$y, E=BYM_data$E, raw_SMR = BYM_data$y / BYM_data$E)
+
+results$fit_y <- results$fit_SMR * results$E
+```
+
+
+```{r}
+results$prop_risk <- results$fit_y / sum(results$fit_y)
+```
+
+```{r}
+breaks <- c(0,0.1,0.25,0.5,0.75,1,1.5,2.5,3,5,202)
+CT_shp_gg_SMR_smth <- CT_shp_gg %>% left_join(results, by="CD_GEOCODI") %>% mutate(fit_cut=cut(fit_SMR, breaks=breaks, labels=(c("[0,0.1]","(0.1,0.25]","(0.25,0.5]","(0.5,0.75]","(0.75,1]","(1,1.5]","(1.5,2.5]","(2.5,3]","(3,5]", ">5")), include.lowest=TRUE))
+
+plot_fort_maps2(CT_shp_gg_SMR_smth, "fit_cut","BYM smoothed SMR", "Aggregate BYM smoothed SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+```
+
+Now going to reallocate homicides in the relavant months using this proportional distribution
+
+```{r}
+sampleDist = function(n) { 
+    sample(x = as.character(results$CD_GEOCODI), n, replace = T, prob = results$prop_risk) 
+}
+
+```
+
+
+```{r}
+BYM_data_mnthly <- SMR_data %>% rename(y=obs_count, E=exp_count) %>% 
+  mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0), y=replace(y, IR_per_mnth==Inf | is.nan(IR_per_mnth), 0)) %>% 
+  dplyr::select(CD_GEOCODI, y, E, Counter) %>% 
+  arrange(CD_GEOCODI) %>% 
+  group_by(CD_GEOCODI) %>%
+  right_join(CT_shp@data, by="CD_GEOCODI") %>% 
+  dplyr::select(CD_GEOCODI, y, E, Counter) %>%
+  mutate(y=replace(y, is.na(y), 0), E=replace(E, is.na(E), 0))
+            
+
+```
+
+```{r}
+set.seed(2014)
+mnth_152_dist <- sampleDist(filter(homs_temporal, type=="Missing", MOD==152)$count)
+mnth_153_dist <- sampleDist(filter(homs_temporal, type=="Missing", MOD==153)$count)
+mnth_154_dist <- sampleDist(filter(homs_temporal, type=="Missing", MOD==154)$count)
+```
+
+
+```{r}
+mnth_152_dist <- as.data.frame(table(mnth_152_dist))
+mnth_152_dist <- cbind(mnth_152_dist, Counter=152)
+colnames(mnth_152_dist)[1] <- "CD_GEOCODI"
+mnth_153_dist <- as.data.frame(table(mnth_153_dist))
+mnth_153_dist <- cbind(mnth_153_dist, Counter=153)
+colnames(mnth_153_dist)[1] <- "CD_GEOCODI"
+mnth_154_dist <- as.data.frame(table(mnth_154_dist))
+mnth_154_dist <- cbind(mnth_154_dist, Counter=154)
+colnames(mnth_154_dist)[1] <- "CD_GEOCODI"
+```
+
+```{r}
+BYM_data_mnthly_adj <- BYM_data_mnthly %>% 
+  left_join(mnth_152_dist, by=c("CD_GEOCODI", "Counter")) %>% mutate(Freq=replace(Freq, is.na(Freq), 0)) %>% mutate(y = y + Freq) %>% select(CD_GEOCODI, Counter, y, E) %>%
+  left_join(mnth_153_dist, by=c("CD_GEOCODI", "Counter")) %>% mutate(Freq=replace(Freq, is.na(Freq), 0)) %>% mutate(y = y + Freq) %>% select(CD_GEOCODI, Counter, y, E) %>%
+  left_join(mnth_154_dist, by=c("CD_GEOCODI", "Counter")) %>% mutate(Freq=replace(Freq, is.na(Freq), 0)) %>% mutate(y = y + Freq) %>% select(CD_GEOCODI, Counter, y, E) 
+  
+```
+
+```{r}
+temporal_adj <- BYM_data_mnthly_adj %>% group_by(Counter) %>% summarize(y=sum(y), E=sum(E))
+ggplot(temporal_adj, aes(x=Counter, y=y)) + geom_line()
+```
+
+```{r}
+write_csv(BYM_data_mnthly_adj, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_per_mnth_MISSING_ADJ.csv")
+```
+

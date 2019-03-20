@@ -1,0 +1,466 @@
+---
+title: "Yearly Models"
+output: html_notebook
+---
+
+Import SMR data
+
+```{r}
+library(readr)
+```
+
+
+```{r}
+SMR_data <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_yr-agg.csv",
+    col_types = cols(CD_GEOCODI = col_character()))
+```
+
+```{r}
+library(broom)
+library(reshape2)
+SMR_data_yr_wd <- dcast(SMR_data, CD_GEOCODI ~ YOD, value.var = "SMR_per_yr")
+
+```
+
+
+```{r}
+library(broom)
+CTs_data_yr <- left_join(CTs_data, SMR_data_yr_wd, by=c("CD_GEOCODI"="CD_GEOCODI"))
+CTs_shp_yr <- CTs
+CTs_shp_yr@data <- CTs_data_yr
+CTs_by_yr_map_tidy <- tidy(CTs_shp_yr)
+CTs_shp_yr$polyID <- sapply(slot(CTs_shp_yr, "polygons"), function(x) slot(x, "ID"))
+CTs_by_yr_map_tidy <- merge(CTs_by_yr_map_tidy, CTs_shp_yr, by.x = "id", by.y="polyID")
+
+CTs_by_yr_map_tidy <- cbind(CTs_by_yr_map_tidy[1:20], apply(CTs_by_yr_map_tidy[21:37],2,SMR_cut_v1))
+
+colnames(CTs_by_yr_map_tidy)[21:37] <- sapply(2001:2017, function(x) paste0("SMR_cuts_", x))
+
+```
+
+```{r}
+#models_year <- readRDS("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/yrly_models.rds")
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringi)
+library(rgdal)
+census_tracts_CE <- readOGR("~/Documents/Harvard - SM80/Thesis/Census_data/CE_setores_censitarios_shape/", "23SEE250GC_SIR", use_iconv = TRUE, encoding = "latin1")
+census_tracts_data <- census_tracts_CE@data
+for (i in 1:ncol(census_tracts_data)){
+  census_tracts_data[,i] <- stri_trans_general(census_tracts_data[,i], "latin-ascii")
+}
+census_tracts_data <- filter(census_tracts_data, NM_MICRO=="FORTALEZA")
+
+census_corrections <- read_csv("~/Documents/Harvard - SM80/Thesis/Census_data/Census_Tract_correction_table.csv", 
+    col_types = cols(CD_GEOCODB = col_character(), 
+        CD_GEOCODB_NEW = col_character(), 
+        CD_GEOCODD = col_character(), CD_GEOCODD_NEW = col_character(), 
+        CD_GEOCODI = col_character(), CD_GEOCODM = col_character(), 
+        CD_GEOCODM_NEW = col_character(), 
+        CD_GEOCODS = col_character(), CD_GEOCODS_NEW = col_character(), 
+        ID = col_character(), NM_BAIRRO = col_character(), 
+        TIPO = col_character()))
+for (i in 1:nrow(census_tracts_data)){
+  ID_CT <- census_tracts_data[i,"ID"]
+  ID_CODI <- census_tracts_data[i,"CD_GEOCODI"]
+  if (ID_CT %in%  census_corrections$ID){
+    corr_row <- filter(census_corrections, ID==ID_CT)
+    if (ID_CODI == corr_row$CD_GEOCODI){
+      census_tracts_data[i,3:13] <- corr_row[,14:24]
+    }
+    else if (ID_CODI != corr_row$CD_GEOCODI){
+      print(paste0("ID and GEOCODI do not match for ID ", ID_CT, " and ", ID_CODI))
+    }
+  }
+}
+CTs_data <- filter(census_tracts_data, NM_MUNICIP=="FORTALEZA")
+```
+
+```{r}
+library(rgdal)
+CTs <- census_tracts_CE
+CTs@data[,1:13] <- sapply(CTs@data[,1:13], as.character)
+CTs <- CTs[(CTs$CD_GEOCODI %in% CTs_data$CD_GEOCODI),]
+CTs_data[,1:13] <- sapply(CTs_data[,1:13], as.character)
+CTs@data <- CTs_data 
+plot(CTs)
+```
+
+###
+
+
+```{r}
+library(INLA)
+CTs_adj <- "/Users/Sudipta/CTs_graph.adj"
+
+BYM_data_yearly <- lapply(2001:2017, function(x) filter(select(SMR_data, CD_GEOCODI, obs_count, exp_count, YOD), YOD==x))
+BYM_data_yearly <- lapply(BYM_data_yearly, function(x) left_join(select(CTs_data, CD_GEOCODI), x, by=c("CD_GEOCODI"="CD_GEOCODI")))
+
+BYM_data_yearly <- lapply(BYM_data_yearly, setNames, c("CD_GEOCODI", "y", "E", "year"))
+
+for (i in 1:length(BYM_data_yearly)){
+  BYM_data_yearly[[i]][is.na(BYM_data_yearly[[i]]$y),"y"] = 0
+  BYM_data_yearly[[i]][is.na(BYM_data_yearly[[i]]$E),"E"] = 0
+  BYM_data_yearly[[i]][is.na(BYM_data_yearly[[i]]$year),"year"] = 2010+i
+}
+
+
+order_yearly <- lapply(BYM_data_yearly, function(x) match(CTs_data$CD_GEOCODI, x$CD_GEOCODI))
+
+for (i in 1:length(BYM_data_yearly)){
+  BYM_data_yearly[[i]] <- BYM_data_yearly[[i]][order_yearly[[i]],]
+}
+
+bymID <- seq(1,3044)
+BYM_data_yearly <- lapply(BYM_data_yearly, function(x) cbind(x, bymID))
+
+
+formula_null <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) 
+
+
+```
+
+```{r}
+library(spdep)
+CT_wm <- poly2nb(CTs_shp_yr, snap=0.001)
+nb2INLA("CT_graph.adj", CT_wm)
+CT_adj <- "CT_graph.adj"
+
+Census_covar <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit/Census_data/census_covariates_Fortaleza.csv")
+
+Census_covar[is.na(Census_covar$Mean_HH_inc),]$Mean_HH_inc <- 1
+Census_covar[Census_covar$Mean_HH_inc==0,]$Mean_HH_inc <- 1
+Census_covar$log_Mean_HH_inc <- log(Census_covar$Mean_HH_inc)
+Census_covar$Cod_setor <- as.character(Census_covar$Cod_setor)
+
+Census_covar$LII <- NA
+
+for (i in 1:3044){
+  CT_Code <- CTs_shp_yr@data$CD_GEOCODI[i]
+  neighbors_codes <- CTs_shp_yr@data$CD_GEOCODI[CT_wm[[i]]]
+  total_nb_inc <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_HH_inc_in_CT)
+  total_nb_hh <- sum(Census_covar[(Census_covar$Cod_setor %in% neighbors_codes),]$Total_no_HH_in_CT)
+  Mean_nb_inc <- total_nb_inc / total_nb_hh
+  LII <- Mean_nb_inc / Census_covar[(Census_covar$Cod_setor)==CT_Code,]$Mean_HH_inc
+  Census_covar[(Census_covar$Cod_setor==CT_Code),]$LII <- LII
+}
+
+Census_covar$LII[Census_covar$LII==Inf] <- NA 
+Census_covar$log_LII <- log(Census_covar$LII)
+
+
+```
+
+```{r}
+BYM_data_yearly <- lapply(BYM_data_yearly, function(x) left_join(x, Census_covar, by=c("CD_GEOCODI"="Cod_setor")))
+```
+
+```{r}
+formula_1 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_Mean_HH_inc + log_LII + Perc_branca + Lit_rate + Perc_PPH_Elec + Perc_Wtr_Spply_Ntwrk + Perc_Garbage_Col_Serv + Perc_Sewerage_Conn
+```
+
+```{r}
+names(BYM_data_yearly) <- as.character(2001:2017)
+
+models_year <- lapply(BYM_data_yearly, function(x) inla(formula_1, family="poisson", data=x, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE)))
+
+```
+
+```{r}
+bymID <- seq(1,3044)
+```
+
+
+```{r}
+m_year <- lapply(models_year, function(x) x$marginals.random$bymID[1:3044])
+zeta_year <- lapply(m_year, function(y) lapply(y, function(x) inla.emarginal(exp,x)))
+
+a=0
+inlaprob_year <- lapply(models_year, function(y) lapply(y$marginals.random$bymID[1:3044], function(X){
+  1-inla.pmarginal(a, X)}))
+
+```
+
+```{r}
+Spatial.results_year <- mapply(function(x,y) data.frame(bymID=bymID,SMR_bym=unlist(x),
+                             pp=unlist(y)), zeta_year, inlaprob_year, SIMPLIFY = FALSE)
+
+```
+
+
+```{r}
+CTs_data$bymID <- bymID
+```
+
+```{r}
+
+CTs_data_bym_yr <- lapply(Spatial.results_year, function(x) left_join(CTs_data, x, by="bymID"))
+
+CTs_bym_yr <- replicate(17, CTs)
+names(CTs_bym_yr) <- as.character(2001:2017)
+
+for (i in 1:length(CTs_bym_yr)){
+  CTs_bym_yr[[i]]@data <- CTs_data_bym_yr[[i]]
+}
+
+library(broom)
+CTs_BYM_map_yr_tidy <- lapply(CTs_bym_yr, function(x) tidy(x))
+
+for (i in 1:length(CTs_bym_yr)){
+  CTs_bym_yr[[i]]$polyID <- sapply(slot(CTs_bym_yr[[i]], "polygons"), function(x) slot(x, "ID"))
+}
+
+CTs_BYM_map_yr_tidy <- mapply(function(x,y) merge(x, y, by.x = "id", by.y="polyID"), CTs_BYM_map_yr_tidy, CTs_bym_yr, SIMPLIFY = FALSE)
+
+
+CTs_BYM_map_yr_tidy <- lapply(CTs_BYM_map_yr_tidy, function(x) cbind(x, SMR_cut_v1(x$SMR_bym)))
+
+for (i in 1:length(CTs_BYM_map_yr_tidy)){
+  colnames(CTs_BYM_map_yr_tidy[[i]])[24] <- "SMR_cuts"
+}
+
+```
+
+
+```{r}
+fit_SMR_CT_map_yrs <- vector("list", 17)
+for (i in 1:length(CTs_BYM_map_yr_tidy)){
+  
+  p <- plot_fort_maps2(CTs_BYM_map_yr_tidy[[i]], fill_str="SMR_cuts", legend_title = paste0("Age and Sex Standardized SMR\n for Fortaleza Census Tracts - ", (2001+i)))
+  print(p)
+  ggsave(plot=p, filename = paste0("SMR_", (2010+i), ".png"), height=200, width=350, units="mm")
+  fit_SMR_CT_map_yrs[[i]] <- p
+}
+```
+
+
+
+
+```{r}
+fitted_values <- lapply(models_year, function(x) x$summary.fitted.values$mean)
+
+Spatial.results_year2 <- Spatial.results_year
+
+Spatial.results_year2 <- mapply(function(x, y) cbind(x, SMR_fit=y), Spatial.results_year2, fitted_values, SIMPLIFY = FALSE, USE.NAMES = TRUE)
+
+```
+
+```{r}
+library(dplyr)
+CTs_data_bym_yr <- lapply(Spatial.results_year2, function(x) left_join(CTs_data, x, by="bymID"))
+
+CTs_bym_yr <- replicate(17, CTs)
+names(CTs_bym_yr) <- as.character(2001:2017)
+
+for (i in 1:length(CTs_bym_yr)){
+  CTs_bym_yr[[i]]@data <- CTs_data_bym_yr[[i]]
+}
+
+library(broom)
+CTs_BYM_map_yr_tidy <- lapply(CTs_bym_yr, function(x) tidy(x))
+
+for (i in 1:length(CTs_bym_yr)){
+  CTs_bym_yr[[i]]$polyID <- sapply(slot(CTs_bym_yr[[i]], "polygons"), function(x) slot(x, "ID"))
+}
+
+CTs_BYM_map_yr_tidy <- mapply(function(x,y) merge(x, y, by.x = "id", by.y="polyID"), CTs_BYM_map_yr_tidy, CTs_bym_yr, SIMPLIFY = FALSE)
+
+
+CTs_BYM_map_yr_tidy <- lapply(CTs_BYM_map_yr_tidy, function(x) cbind(x, SMR_cut_v1(x$SMR_fit)))
+
+for (i in 1:length(CTs_BYM_map_yr_tidy)){
+  colnames(CTs_BYM_map_yr_tidy[[i]])[25] <- "SMR_cuts"
+}
+
+
+```
+
+```{r}
+fit_SMR_CT_map_yrs <- vector("list", 17)
+for (i in 1:length(CTs_BYM_map_yr_tidy)){
+  
+  p <- plot_fort_maps2(CTs_BYM_map_yr_tidy[[i]], fill_str="SMR_cuts", legend_title = paste0("Age and Sex Standardized SMR\n for Fortaleza Census Tracts - ", (2000+i)))
+  print(p)
+  ggsave(plot=p, filename = paste0("SMR_fit", (2000+i), ".png"), height=200, width=350, units="mm")
+  fit_SMR_CT_map_yrs[[i]] <- p
+}
+```
+
+```{r}
+summaries <- lapply(models_year, function(x) summary(x))
+```
+
+
+Read in monthly data
+```{r}
+SMR_data_mnth <- read_csv("~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_mnth.csv", 
+    col_types = cols(CD_GEOCODI = col_character()))
+```
+
+```{r}
+BYM_data_mnthly <- SMR_data_mnth[,1:4]
+BYM_data_mnthly <- rbind(BYM_data_mnthly, data.frame(CD_GEOCODI=as.vector(sapply(BYM_data_yearly$`2001`$CD_GEOCODI[!(BYM_data_yearly$`2001`$CD_GEOCODI %in% unique(BYM_data_mnthly$CD_GEOCODI))], function(x) rep(x, 204), USE.NAMES = FALSE)), Counter=rep(1:204, 23), obs_count=rep(0, 4692), exp_count=rep(0,4692)))
+
+BYM_data_mnthly <- left_join(BYM_data_mnthly, select(BYM_data_yearly$`2001`, CD_GEOCODI, bymID, log_Mean_HH_inc, log_LII, Perc_branca, Lit_rate, Perc_PPH_Elec, Perc_Wtr_Spply_Ntwrk), by="CD_GEOCODI")
+
+BYM_data_mnthly$yr_2016 <- ifelse(BYM_data_mnthly$Counter >= 180 | BYM_data_mnthly$Counter <= 192, 1, 0) 
+
+BYM_data_mnthly$bymID2 <- BYM_data_mnthly$bymID
+
+colnames(BYM_data_mnthly)[3] <- "y"
+colnames(BYM_data_mnthly)[4] <- "E"
+```
+
+Yearly BYM data
+```{r}
+BYM_data_yrly_agg <- cbind(BYM_data_yearly[[1]], Year=rep(2001,3044))
+for (i in 2:17){
+  BYM_data_yrly_agg <- rbind(BYM_data_yrly_agg, cbind(BYM_data_yearly[[i]], Year=rep(2001+i,3044)))
+}
+
+BYM_data_yrly_agg <- BYM_data_yrly_agg %>% group_by(CD_GEOCODI, year, bymID) %>% summarize(y=sum(y), E=sum(E)) %>% left_join(select(BYM_data_yearly[[1]], -bymID, -y, -E, -year), by="CD_GEOCODI")
+
+BYM_data_yrly_agg$bin_2016 <- ifelse(BYM_data_yrly_agg$year==2016, 1, 0)
+BYM_data_yrly_agg$bymID2 <- BYM_data_yrly_agg$bymID
+```
+
+```{r}
+formula_2 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_Mean_HH_inc 
+
+
+formula_3 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_LII 
+
+formula_4 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_Mean_HH_inc + log_LII
+
+formula_5 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_Mean_HH_inc + log_LII + Lit_rate + Perc_PPH_Elec + Perc_Wtr_Spply_Ntwrk 
+
+formula_6 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj) + log_Mean_HH_inc + log_LII + Perc_branca + Lit_rate + Perc_PPH_Elec + Perc_Wtr_Spply_Ntwrk 
+
+formula_mnthly_null <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, Counter, model="iid", constr=TRUE) + Counter + yr_2016 
+
+```
+
+```{r}
+
+
+models_year_null <- lapply(BYM_data_yearly, function(x) inla(formula_null, family="poisson", data=x, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE)))
+
+saveRDS(models_year_null, "models_year_null.rds")
+
+#models_mnthly_null <- inla(formula_mnthly_null, family="poisson", data=BYM_data_mnthly, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+
+
+```
+
+
+```{r}
+formula_yrlytrnd_null <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, year, model="iid", constr=TRUE) + year
+
+models_yrlytrnd_null <- inla(formula_yrlytrnd_null, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(models_yrlytrnd_null, "models_yrlytrnd_null.rds")
+
+```
+
+```{r}
+formula_yrlytrnd_2016fix <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, year, model="iid", constr=TRUE) + year + bin_2016
+
+models_yrlytrnd_2016fix <- inla(formula_yrlytrnd_2016fix, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(models_yrlytrnd_2016fix, "models_yrlytrnd_2016fix.rds")
+```
+
+```{r}
+BYM_data_yrly_agg$bymID3 <- BYM_data_yrly_agg$bymID2
+
+formula_yrlytrnd_2016fix2 <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, year, model="iid", constr=TRUE) + f(bymID3, bin_2016, model="iid", constr=TRUE) + year + bin_2016
+
+models_yrlytrnd_2016fix2 <- inla(formula_yrlytrnd_2016fix2, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(models_yrlytrnd_2016fix2, "models_yrlytrnd_2016fix2.rds")
+```
+
+```{r}
+library(readr)
+write_csv(results_null, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Spatiotemp_fit_values.csv")
+```
+
+```{r}
+formula_yrly_covar_notime <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + log_LII ....
+
+formula_yrly_covar_notime <- inla(formula_yrly_covar_notime, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(formula_yrly_covar_notime, "formula_yrly_covar_notime.rds")
+```
+
+```{r}
+formula_yrly_covar_yrlytrnd <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, year, model="iid", constr=TRUE) + year + log_LII ....
+
+formula_yrly_covar_yrlytrnd <- inla(formula_yrly_covar_yrlytrnd, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(formula_yrly_covar_yrlytrnd, "formula_yrly_covar_yrlytrnd.rds")
+```
+
+
+```{r}
+formula_yrly_covar_yrlytrnd_fix <- y ~ 1 + f(bymID, model="bym",graph=CTs_adj, constr=TRUE) + f(bymID2, year, model="iid", constr=TRUE) + f(bymID3, bin_2016, model="iid", constr=TRUE) + year + bin_2016 + log_LII ....
+
+formula_yrly_covar_yrlytrnd_fix <- inla(formula_yrly_covar_yrlytrnd, family="poisson", data=BYM_data_yrly_agg, E=E, verbose=TRUE, control.compute=list(dic=TRUE), control.predictor=list(compute=TRUE))
+
+saveRDS(formula_yrly_covar_yrlytrnd_fix, "formula_yrly_covar_yrlytrnd_fix.rds")
+```
+
+
+```{r}
+SMR_cut_v1 <- function(column){
+  cut(column, breaks=c(-1, 0.5, 0.75, 1.0, 1.25, 1.50, 1.75, 2.0, 5.0, Inf),
+      labels=c("<0.5", "0.5-0.75",
+               "0.75-1.0", "1.0-1.25","1.25-1.50","1.5-1.75", "1.75-2.0",
+               "2.0-5.0", ">5.0"))
+}
+
+
+plot_fort_maps2 <- function(data, fill_str, legend_title){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+  geom_polygon(                                          # make a polygon
+  data = data,                                    # data frame
+  aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+  fill = fill_str),
+  size=0.1, color="black") +                # variable to use for filling
+  scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = -1,
+                    drop = FALSE) + # fill with brewer colors   # add title
+  theme(line = element_blank(),
+  axis.text=element_blank(),      # .. tickmarks..
+  axis.title=element_blank(),
+  legend.text=element_text(size=10),
+  legend.title=element_text(size=12), # .. axis labels..
+  panel.background = element_blank()) 
+}
+plot_fort_maps3 <- function(data, fill_str, legend_title){
+  require(ggplot2)
+  require(ggsn)
+  require(broom)
+  ggplot() +                                               # initialize ggplot object
+  geom_polygon(                                          # make a polygon
+  data = data,                                    # data frame
+  aes_string(x = "long", y = "lat", group = "group",                # coordinates, and group them by polygons
+  fill = fill_str),
+  size=0.1, color="black") +                # variable to use for filling
+  scale_fill_brewer(name=legend_title, palette = "RdYlBu", direction = 1,
+                    drop = FALSE) + # fill with brewer colors   # add title
+  theme(line = element_blank(),
+  axis.text=element_blank(),      # .. tickmarks..
+  axis.title=element_blank(),
+  legend.text=element_text(size=10),
+  legend.title=element_text(size=12), # .. axis labels..
+  panel.background = element_blank()) 
+}
+```
+
