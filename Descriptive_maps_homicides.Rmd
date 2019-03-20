@@ -2,6 +2,12 @@
 title: "Descriptive Maps"
 output: html_notebook
 ---
+```{r}
+library(rgdal)
+library(ggplot2)
+library(readr)
+library(dplyr)
+```
 
 Function
 ```{r}
@@ -65,6 +71,12 @@ grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, 
   invisible(combined)
 
 }
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
 ```
 
 ###Bairro Level Plots
@@ -106,7 +118,7 @@ Aggregated plot of IRs
 ```{r}
 breaks <- quantile(bairro_agg_homs$IR, probs=c(seq(0,1,0.15),1))
 bairro_shp_gg_count_agg <- bairro_shp_gg[,-1] %>% left_join(bairro_agg_homs[,c(1,4)], by=c("cod_ibge"="CD_GEOCODB")) %>% mutate(cut=cut(IR, breaks=breaks, include.lowest=TRUE))
-plot_fort_maps2(bairro_shp_gg_count_agg, "cut","Homicide counts", "Aggregate IR for 2001-17 by bairro") + theme(plot.title = element_text(size=10), legend.position = "right")
+plot_fort_maps2(bairro_shp_gg_count_agg, "cut","Incidence Rate\n(per 100,000 PYs)", "Aggregate IR for 2001-17 by bairro") + theme(plot.title = element_text(size=10), legend.position = "right")
 ```
 
 
@@ -205,7 +217,7 @@ Aggregated plot of SMRs
 ```{r}
 breaks <- quantile(CT_agg_homs$SMR, probs=c(seq(0,1,0.15),1))
 CT_shp_gg_count_agg <- CT_shp_gg[,-1] %>% left_join(CT_agg_homs[,c(1,3)], by="CD_GEOCODI") %>% mutate(cut=cut(SMR, breaks=breaks, include.lowest=TRUE))
-plot_fort_maps2(CT_shp_gg_count_agg, "cut","Homicide counts", "Aggregate SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+plot_fort_maps2(CT_shp_gg_count_agg, "cut","SMR", "Aggregate SMR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
 ```
 
 Aggregated plot of IRs
@@ -213,7 +225,7 @@ Aggregated plot of IRs
 ```{r}
 breaks <- quantile(CT_agg_homs$IR, probs=c(seq(0,1,0.15),1))
 CT_shp_gg_count_agg <- CT_shp_gg[,-1] %>% left_join(CT_agg_homs[,c(1,4)], by="CD_GEOCODI") %>% mutate(cut=cut(IR, breaks=breaks, include.lowest=TRUE))
-plot_fort_maps2(CT_shp_gg_count_agg, "cut","Homicide counts", "Aggregate IR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
+plot_fort_maps2(CT_shp_gg_count_agg, "cut","Incidence Rate\n(per 100,000 PYs)", "Aggregate IR for 2001-17 by CT") + theme(plot.title = element_text(size=10), legend.position = "right")
 ```
 
 
@@ -274,12 +286,18 @@ CT_shp_gg_SMR <- CT_shp_gg[,-1] %>% left_join(spread(CT_homs[,c(1,2,6)], YOD, SM
 ```{r}
 SMR_plots <- sapply(2001:2017, function(x) plot_fort_maps2(CT_shp_gg_SMR, paste0("`",x,"_cut`"), paste0("IR for ",x), as.character(x)), simplify = FALSE)
 
-plot <- SMR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="Homicide IR"))
+plot <- SMR_plots[[1]] + theme(legend.position = "right", legend.text=element_text(size=5), legend.title=element_text(size=5), legend.key.size = unit(0.5,"line")) + guides(fill=guide_legend(title="SMR"))
 mylegend <- g_legend(plot)
-grid_SMR <- do.call((plot_grid), c(count_plots, nrow=5)) + draw_grob(mylegend, 0.28, 0.08, 0.28, 0.08)
+grid_SMR <- do.call((plot_grid), c(count_plots, nrow=6)) + draw_grob(mylegend, 0.7, 0.07, 0.7, 0.07)
 ```
 
 ```{r}
 grid_SMR
+```
+
+
+```{r}
+CT_shp_gg_SMR$SMR_time1 <- CT_shp_gg_SMR$`2001` + CT_shp_gg_SMR$`2002` + CT_shp_gg_SMR$`2003` + CT_shp_gg_SMR$`2004` + CT_shp_gg_SMR$`2005` + CT_shp_gg_SMR$`2006`
+CT_shp_gg_SMR$SMR_time2 <- CT_shp_gg_SMR$`2001` + CT_shp_gg_SMR$`2002` + CT_shp_gg_SMR$`2003` + CT_shp_gg_SMR$`2004` + CT_shp_gg_SMR$`2005` + CT_shp_gg_SMR$`2006`
 ```
 

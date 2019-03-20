@@ -237,8 +237,8 @@ Now I am going to do the same thing (generate aggregate and yearly SMR and IR) a
 CTs_to_bairro <- distinct(select(homs, CD_GEOCODI, CD_GEOCODB))
 CTs_to_bairro <- CTs_to_bairro[complete.cases(CTs_to_bairro),]
 
-pop_bairro <- left_join(pop_ct, CTs_to_bairro, by=c("Cod_setor"="CD_GEOCODI")) %>% group_by(CD_GEOCODB, AgeGroup, Sex) %>% summarize(population=sum(population))
-pop_bairro[is.na(pop_bairro$population),]$population <- 0
+pop_bairro <- left_join(pop_ct, CTs_to_bairro, by=c("Cod_setor"="CD_GEOCODI")) %>% group_by(CD_GEOCODB, AgeGroup, Sex) %>% summarize(population=sum(population, na.rm=TRUE))
+#pop_bairro[is.na(pop_bairro$population),]$population <- 0
 pop_bairro <- pop_bairro[complete.cases(pop_bairro),]
 
 bairro_expected_counts <- left_join(pop_bairro, select(city_rates, Sex, AgeGroup, rate17yr, rate_per_yr), by=c("Sex", "AgeGroup"))
@@ -429,6 +429,12 @@ rm(df)
 
 ```
 
+```{r}
+ct_SMR_per_period <- ct_SMR_per_mnth %>% mutate(period=ifelse(Counter<=60, 1, ifelse(Counter>60 & Counter<=120, 2, ifelse(Counter>120 & Counter <=156, 3, ifelse(Counter>156 & Counter <=190, 4, ifelse(Counter>190 & Counter<=204, 5, NA)))))) %>% group_by(CD_GEOCODI, period) %>% summarize(obs_count=sum(obs_count), exp_count=sum(exp_count), pop=mean(pop)) %>% mutate(SMR_per_period=obs_count/exp_count)
+
+```
+
+
 Now I am going to write all the files.
 
 ```{r}
@@ -438,6 +444,7 @@ write_csv(ct_SMR_17yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRI
 write_csv(ct_SMR_per_yr, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_yr-agg.csv")
 write_csv(bairro_SMR_per_mnth, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/Bairro_SMR_IR_per_mnth.csv")
 write_csv(ct_SMR_per_mnth, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_IR_per_mnth.csv")
+write_csv(ct_SMR_per_period, "~/Documents/Harvard - SM80/Thesis/Fortaleza_Hom_RGit_PRIVATE_Files/CT_SMR_per_period.csv")
 
 ```
 
